@@ -9,9 +9,12 @@ import {
 } from 'react'
 import {
   beginLogin,
+  clearClientIdOverride,
   clearToken,
   completeLoginFromUrl,
   getClientId,
+  getClientIdOverride,
+  hasBuiltInClientId,
   isConnected,
   redirectUri,
   setClientId as persistClientId,
@@ -25,10 +28,15 @@ type SpotifyValue = {
   user: SpotifyUser | null
   error: string | null
   clientId: string
+  /** Non-empty only when the user supplied their own Client ID. */
+  clientIdOverride: string
+  /** True when the deployment ships with a Client ID, so users just sign in. */
+  hasBuiltInClientId: boolean
   redirectUri: string
   playlists: SpotifyPlaylist[]
   playlistsLoading: boolean
   setClientId: (id: string) => void
+  resetClientId: () => void
   connect: () => Promise<void>
   disconnect: () => void
   refreshPlaylists: () => Promise<void>
@@ -53,6 +61,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SpotifyUser | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [clientId, setClientIdState] = useState(getClientId)
+  const [clientIdOverride, setClientIdOverrideState] = useState(getClientIdOverride)
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([])
   const [playlistsLoading, setPlaylistsLoading] = useState(false)
 
@@ -127,7 +136,14 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
 
   const setClientId = useCallback((id: string) => {
     persistClientId(id)
-    setClientIdState(id.trim())
+    setClientIdState(getClientId())
+    setClientIdOverrideState(getClientIdOverride())
+  }, [])
+
+  const resetClientId = useCallback(() => {
+    clearClientIdOverride()
+    setClientIdState(getClientId())
+    setClientIdOverrideState(getClientIdOverride())
   }, [])
 
   const value = useMemo<SpotifyValue>(
@@ -136,16 +152,32 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
       user,
       error,
       clientId,
+      clientIdOverride,
+      hasBuiltInClientId: hasBuiltInClientId(),
       redirectUri: redirectUri(),
       playlists,
       playlistsLoading,
       setClientId,
+      resetClientId,
       connect,
       disconnect,
       refreshPlaylists,
       clearError: () => setError(null),
     }),
-    [status, user, error, clientId, playlists, playlistsLoading, setClientId, connect, disconnect, refreshPlaylists],
+    [
+      status,
+      user,
+      error,
+      clientId,
+      clientIdOverride,
+      playlists,
+      playlistsLoading,
+      setClientId,
+      resetClientId,
+      connect,
+      disconnect,
+      refreshPlaylists,
+    ],
   )
 
   return <SpotifyContext.Provider value={value}>{children}</SpotifyContext.Provider>

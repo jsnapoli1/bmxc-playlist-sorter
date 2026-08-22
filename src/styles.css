@@ -571,13 +571,128 @@ code.inline {
 
 .hint { font-size: 12.5px; color: var(--text-faint); margin-top: 4px; }
 
+/* The one button a non-technical user should ever need. */
+.connect-panel { padding: 4px 0; }
+
+.btn.connect-spotify {
+  background: #1db954;
+  border-color: #1db954;
+  color: #06180d;
+  font-weight: 700;
+  font-size: 15px;
+  padding: 11px 22px;
+  border-radius: 999px;
+  min-height: 44px;
+}
+.btn.connect-spotify:hover:not(:disabled) { background: #1ed760; border-color: #1ed760; }
+.btn.connect-spotify:disabled { background: var(--panel); border-color: var(--border-strong); color: var(--text-faint); }
+
+/* ---------------------------------------------------------- mobile layout */
+
+/*
+ * On a phone the three-pane desktop layout is wrong: stacking library, board
+ * and inspector buries the schedule below two screens of chrome, and each
+ * pane brings its own scroll container. Instead the board owns the screen,
+ * and tapping a block opens a full-screen sheet.
+ */
+
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.sheet-tabs {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+  flex: none;
+}
+.sheet-tablist { display: flex; gap: 6px; min-width: 0; }
+.sheet-tabs .tab { flex: 1; text-align: center; min-height: 36px; }
+.sheet-tabs .btn { flex: none; }
+
+.sheet > .inspector,
+.sheet > .library {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  border: none;
+  background: var(--bg);
+}
+.sheet > .library .scroll { max-height: none; }
+/* The sheet has its own Done button; drop the panel's duplicate close. */
+.sheet > .inspector .panel-title > .btn.ghost { display: none; }
+
 @media (max-width: 980px) {
-  .workspace { flex-direction: column; overflow-y: auto; }
-  .library, .inspector { width: 100%; border: none; border-bottom: 1px solid var(--border); }
-  .library .scroll { max-height: 260px; }
-  .inspector { border-top: 1px solid var(--border); }
-  .days { flex-wrap: wrap; }
-  .day { width: 100%; }
+  /* One scroll container for the whole workspace, never nested ones. */
+  .workspace {
+    flex-direction: column;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .board { display: block; min-height: 0; }
+  .page { overflow: visible; padding: 14px; }
+
+  .days {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    overflow: visible;
+    padding: 10px;
+    gap: 10px;
+  }
+  .day { width: 100%; max-height: none; }
+  .day-blocks { overflow: visible; }
+
+  .library,
+  .inspector {
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .board-toolbar { position: sticky; top: 0; z-index: 5; }
+
+  /* Comfortable touch targets. */
+  .btn { min-height: 38px; }
+  .btn.sm { min-height: 32px; padding: 5px 10px; }
+  .btn.icon { min-width: 34px; }
+  .track { padding: 10px; }
+  .track .btn.sm { min-width: 40px; min-height: 36px; font-size: 16px; }
+  input[type='text'],
+  input[type='time'],
+  input[type='date'],
+  input[type='search'],
+  select,
+  textarea {
+    /* 16px keeps iOS Safari from zooming in on focus. */
+    font-size: 16px;
+    padding: 9px 11px;
+  }
+
+  .topbar { gap: 8px; padding: 8px 12px; }
+  .brand { font-size: 15px; }
+  /* Pack the top bar onto two rows: the placed-count is already shown per day. */
+  .topbar .spacer { display: none; }
+  .topbar > .pill { display: none; }
+
+  .modal { max-height: 92vh; padding: 14px; }
+
+  /* Time column above the entry, rather than a cramped two-column grid. */
+  .run-block { grid-template-columns: 1fr; gap: 4px; }
+  .run-when { display: flex; align-items: center; gap: 8px; }
+}
+
+@media (max-width: 480px) {
+  .brand-text { display: none; }
+  .tabs { width: 100%; }
+  .tabs .tab { flex: 1; }
 }
 
 @media print {

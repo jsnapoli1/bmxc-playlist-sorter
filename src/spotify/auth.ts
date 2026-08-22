@@ -32,16 +32,41 @@ export function redirectUri(): string {
   return `${window.location.origin}${base}`.replace(/\/+$/, '/')
 }
 
+/**
+ * A Client ID baked in at build time (VITE_SPOTIFY_CLIENT_ID).
+ *
+ * This is what turns the app from "every user registers their own Spotify
+ * app" into "every user clicks one button". A PKCE client ID is public by
+ * design — it is not a secret, and shipping it in the bundle is the intended
+ * use. What protects it is Spotify's redirect-URI allowlist: a code can only
+ * ever be sent back to a URI registered on the app.
+ */
+export const BUILT_IN_CLIENT_ID = (
+  (import.meta.env.VITE_SPOTIFY_CLIENT_ID as string | undefined) ?? ''
+).trim()
+
+export function hasBuiltInClientId(): boolean {
+  return BUILT_IN_CLIENT_ID.length > 0
+}
+
+/** A Client ID the user typed in, overriding the built-in one. */
+export function getClientIdOverride(): string {
+  return localStorage.getItem(CLIENT_ID_KEY)?.trim() ?? ''
+}
+
 export function getClientId(): string {
-  return (
-    localStorage.getItem(CLIENT_ID_KEY) ||
-    (import.meta.env.VITE_SPOTIFY_CLIENT_ID as string | undefined) ||
-    ''
-  )
+  return getClientIdOverride() || BUILT_IN_CLIENT_ID
 }
 
 export function setClientId(id: string): void {
-  localStorage.setItem(CLIENT_ID_KEY, id.trim())
+  const trimmed = id.trim()
+  if (!trimmed || trimmed === BUILT_IN_CLIENT_ID) localStorage.removeItem(CLIENT_ID_KEY)
+  else localStorage.setItem(CLIENT_ID_KEY, trimmed)
+}
+
+/** Drop a manual Client ID and fall back to the one shipped with the app. */
+export function clearClientIdOverride(): void {
+  localStorage.removeItem(CLIENT_ID_KEY)
 }
 
 export function loadToken(): TokenSet | null {
