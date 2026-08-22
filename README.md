@@ -62,14 +62,19 @@ developer dashboard.
    `https://<your-worker>.workers.dev/`. Add `http://127.0.0.1:5173/` too if you
    develop locally.
 3. Copy the **Client ID** and set it as `VITE_SPOTIFY_CLIENT_ID` at build time.
-   On Cloudflare, that is **Worker → Settings → Build → Build variables and
-   secrets**; it takes effect on the next deploy. Locally, copy `.env.example`
-   to `.env`.
 
-The Client ID ends up in the JavaScript bundle, which is correct and safe: PKCE
-public clients are designed for exactly this, there is no client secret
-involved, and Spotify will only ever return a code to a redirect URI you
-registered.
+This repository already ships one: `.env.production` holds the Client ID for the
+deployed site, so a Cloudflare build needs no extra configuration. To point the
+site at a different Spotify app, change that file and redeploy — or override it
+with a `VITE_SPOTIFY_CLIENT_ID` build variable under **Worker → Settings → Build
+→ Build variables and secrets**, which takes precedence. For local development,
+copy `.env.example` to `.env` (`.env.production` only applies to builds).
+
+The Client ID ends up in the JavaScript bundle, and is committed here in
+`.env.production`. That is correct and safe rather than a leaked credential:
+PKCE public clients are designed for exactly this, there is no client secret
+anywhere in this app, and Spotify will only ever return an authorization code to
+a redirect URI registered on the app — which only its owner can add.
 
 > **Spotify's 25-user limit.** A new Spotify app starts in **Development
 > mode**, which allows at most 25 users, and *each one must be added by name
