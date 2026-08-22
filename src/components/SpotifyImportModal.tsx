@@ -3,6 +3,7 @@ import { useStore } from '../lib/store.tsx'
 import { useSpotify } from '../spotify/SpotifyProvider.tsx'
 import { getPlaylist, getPlaylistTracks, type SpotifyPlaylist } from '../spotify/api.ts'
 import SpotifySetup from './SpotifySetup.tsx'
+import ScopeNotice from './ScopeNotice.tsx'
 
 /** Accepts a playlist id, a spotify: URI, or an open.spotify.com link. */
 export function parsePlaylistRef(input: string): string | null {
@@ -112,6 +113,7 @@ export default function SpotifyImportModal({ onClose }: { onClose: () => void })
           <SpotifySetup />
         ) : (
           <>
+            <ScopeNotice />
             {/* Errors from loading the playlist list live on the provider;
                 without this they failed silently behind an empty grid. */}
             {(error || connectionError) && (

@@ -16,6 +16,7 @@ import {
   getClientIdOverride,
   hasBuiltInClientId,
   isConnected,
+  missingScopes,
   redirectUri,
   setClientId as persistClientId,
 } from './auth.ts'
@@ -34,6 +35,10 @@ type SpotifyValue = {
   hasBuiltInClientId: boolean
   /** Set when the profile call failed but playlists may still work. */
   profileNote: string | null
+  /** Requested scopes the stored token lacks; fixed only by re-consenting. */
+  missingScopes: string[]
+  /** Drop the stored token and start a fresh consent. */
+  reconnect: () => Promise<void>
   redirectUri: string
   playlists: SpotifyPlaylist[]
   playlistsLoading: boolean
@@ -139,6 +144,15 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const reconnect = useCallback(async () => {
+    clearToken()
+    setUser(null)
+    setPlaylists([])
+    setProfileNote(null)
+    setError(null)
+    await beginLogin()
+  }, [])
+
   const disconnect = useCallback(() => {
     clearToken()
     setUser(null)
@@ -168,12 +182,14 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
       clientIdOverride,
       hasBuiltInClientId: hasBuiltInClientId(),
       profileNote,
+      missingScopes: missingScopes(),
       redirectUri: redirectUri(),
       playlists,
       playlistsLoading,
       setClientId,
       resetClientId,
       connect,
+      reconnect,
       disconnect,
       refreshPlaylists,
       clearError: () => setError(null),
@@ -185,11 +201,13 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
       clientId,
       clientIdOverride,
       profileNote,
+      reconnect,
       playlists,
       playlistsLoading,
       setClientId,
       resetClientId,
       connect,
+      reconnect,
       disconnect,
       refreshPlaylists,
     ],
