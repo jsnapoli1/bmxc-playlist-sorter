@@ -50,19 +50,22 @@ async function call<T>(path: string, init: RequestInit = {}, retry = true): Prom
     } catch {
       /* response had no JSON body */
     }
+    const where = path.startsWith('http') ? new URL(path).pathname : path
     if (res.status === 403) {
       // Spotify's own text is often just "Forbidden", which tells nobody
       // anything. In Development mode this almost always means the account
       // is not on the app's allowlist.
       throw new Error(
         [
-          detail && detail.toLowerCase() !== 'forbidden' ? `Spotify said: ${detail}.` : 'Spotify refused that request (403).',
+          detail && detail.toLowerCase() !== 'forbidden'
+            ? `Spotify said: ${detail} (${where}).`
+            : `Spotify refused ${where} (403).`,
           'In Development mode only accounts added under User Management in the Spotify app dashboard may use the app,',
           "and the app owner's Spotify Premium subscription must be active.",
         ].join(' '),
       )
     }
-    throw new Error(detail || `Spotify request failed (${res.status})`)
+    throw new Error(detail ? `${detail} (${where})` : `Spotify request failed (${res.status}) on ${where}`)
   }
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
@@ -82,6 +85,38 @@ async function pageAll<T>(
     url = page.next
   }
   return out
+}
+
+export type ProbeResult = {
+  label: string
+  path: string
+  status: number
+  ok: boolean
+  detail: string
+}
+
+/** Call an endpoint and report what happened instead of throwing. */
+export async function probeEndpoint(label: string, path: string): Promise<ProbeResult> {
+  try {
+    const token = await getAccessToken()
+    const res = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${token}` } })
+    let detail = ''
+    try {
+      const body = (await res.json()) as { error?: { message?: string } }
+      detail = body.error?.message ?? ''
+    } catch {
+      /* no JSON body */
+    }
+    return { label, path, status: res.status, ok: res.ok, detail }
+  } catch (err) {
+    return {
+      label,
+      path,
+      status: 0,
+      ok: false,
+      detail: err instanceof Error ? err.message : String(err),
+    }
+  }
 }
 
 export async function getMe(): Promise<SpotifyUser> {

@@ -2,12 +2,17 @@ import { useRef, useState } from 'react'
 import { useStore } from '../lib/store.tsx'
 import { useSpotify } from '../spotify/SpotifyProvider.tsx'
 import SpotifySetup from './SpotifySetup.tsx'
+import SpotifyDiagnostics from './SpotifyDiagnostics.tsx'
 import { createPlaylistWithTracks } from '../spotify/api.ts'
 import { minutesOf } from '../lib/time.ts'
+import { loadToken } from '../spotify/auth.ts'
 
 export default function SettingsView() {
   const { state, plan, dispatch, exportJson, importJson } = useStore()
-  const { status, user, disconnect, redirectUri } = useSpotify()
+  const { status, user, disconnect, redirectUri, error: connectionError } = useSpotify()
+  // A rejected account still has a token; without this the panel below would
+  // send them back to the connect button in a loop instead of explaining.
+  const hasToken = Boolean(loadToken())
   const fileRef = useRef<HTMLInputElement>(null)
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -92,6 +97,23 @@ export default function SettingsView() {
               <div className="hint" style={{ marginTop: 12 }}>
                 Redirect URI for this install: <code className="inline">{redirectUri}</code>
               </div>
+              <SpotifyDiagnostics />
+            </>
+          ) : hasToken ? (
+            <>
+              <div className="banner error tiny">
+                Signed in to Spotify, but it is refusing requests.
+                {connectionError ? ` ${connectionError}` : ''}
+              </div>
+              <div className="row wrap">
+                <button className="btn" onClick={disconnect}>
+                  Disconnect and start over
+                </button>
+              </div>
+              <div className="hint" style={{ marginTop: 12 }}>
+                Redirect URI for this install: <code className="inline">{redirectUri}</code>
+              </div>
+              <SpotifyDiagnostics />
             </>
           ) : (
             <SpotifySetup />
