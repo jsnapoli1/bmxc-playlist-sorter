@@ -235,6 +235,26 @@ export async function getAccessToken(): Promise<string> {
   return (await refreshInFlight).access_token
 }
 
+/** Scopes Spotify actually granted the stored token, if it reported them. */
+export function grantedScopes(): string[] {
+  const scope = loadToken()?.scope
+  return scope ? scope.split(' ').filter(Boolean) : []
+}
+
+/**
+ * Scopes this build asks for that the stored token does not carry.
+ *
+ * Tokens never gain scopes retroactively, so after this app starts
+ * requesting a new one, everyone already signed in keeps a token without it
+ * until they consent again. Empty when the token reported no scopes at all,
+ * since then nothing can be concluded.
+ */
+export function missingScopes(): string[] {
+  const granted = grantedScopes()
+  if (!granted.length) return []
+  return SCOPES.filter((s) => !granted.includes(s))
+}
+
 export function isConnected(): boolean {
   const token = loadToken()
   return Boolean(token && (token.refresh_token || Date.now() < token.expires_at))

@@ -3,6 +3,7 @@ import { useStore } from '../lib/store.tsx'
 import { useSpotify } from '../spotify/SpotifyProvider.tsx'
 import SpotifySetup from './SpotifySetup.tsx'
 import SpotifyDiagnostics from './SpotifyDiagnostics.tsx'
+import ScopeNotice from './ScopeNotice.tsx'
 import { createPlaylistWithTracks } from '../spotify/api.ts'
 import { minutesOf } from '../lib/time.ts'
 import { loadToken } from '../spotify/auth.ts'
@@ -76,6 +77,7 @@ export default function SettingsView() {
           <h3>Spotify</h3>
           {status === 'connected' ? (
             <>
+              <ScopeNotice />
               <div className="row" style={{ marginTop: 10 }}>
                 {user?.image ? <img className="art" src={user.image} alt="" /> : <div className="art">♪</div>}
                 <div className="grow">
