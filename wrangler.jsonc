@@ -3,6 +3,16 @@
   "name": "bmxc-playlist-sorter",
   "compatibility_date": "2026-08-22",
 
+  // Publish on <name>.<subdomain>.workers.dev. Workers created through the
+  // dashboard's Git-import flow can land with no route attached at all
+  // ("No URLs enabled"), so state it here rather than relying on a default.
+  "workers_dev": true,
+
+  // Preview URLs would add more public hostnames, and each is a distinct
+  // origin that Spotify would reject unless separately registered as a
+  // redirect URI — so keep exactly one URL to register.
+  "preview_urls": false,
+
   // Assets-only Worker: Cloudflare serves the built files straight from its
   // edge, with no Worker invocation per request (and so no request billing).
   // The app is a client-side SPA with no backend, so there is no `main` script.

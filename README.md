@@ -131,7 +131,17 @@ npx wrangler login     # one-time, opens a browser
 npm run deploy         # builds, then wrangler deploy
 ```
 
-That publishes to `https://bmxc-playlist-sorter.<your-subdomain>.workers.dev`.
+That publishes to `https://bmxc-playlist-sorter.<your-subdomain>.workers.dev`. Your
+account subdomain is shown on the **Workers & Pages** page in the dashboard, next
+to **Your subdomain**.
+
+`wrangler.jsonc` sets `workers_dev: true` explicitly. A Worker created through the
+dashboard's Git-import flow can deploy successfully but arrive with no route
+attached — the dashboard then reports **No URLs enabled** and there is no address
+to visit. Setting it in config means every deploy reattaches the route. It also
+sets `preview_urls: false`: preview builds would otherwise get their own public
+hostnames, and since Spotify only accepts redirect URIs registered in advance,
+extra origins are ones the login flow could never use anyway.
 
 In CI, or anywhere a browser login isn't possible, set a `CLOUDFLARE_API_TOKEN`
 (the **Edit Cloudflare Workers** template is the right scope) and
