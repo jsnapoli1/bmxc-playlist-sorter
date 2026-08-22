@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { probeEndpoint, type ProbeResult } from '../spotify/api.ts'
 import { getClientId, loadToken, redirectUri, SCOPES } from '../spotify/auth.ts'
+import { useSpotify } from '../spotify/SpotifyProvider.tsx'
 
 /**
  * Spotify's 403s do not say which of several unrelated causes applies, so
@@ -8,6 +9,7 @@ import { getClientId, loadToken, redirectUri, SCOPES } from '../spotify/auth.ts'
  * belongs to, which scopes were actually granted, and how each call answers.
  */
 export default function SpotifyDiagnostics() {
+  const { profileNote } = useSpotify()
   const [results, setResults] = useState<ProbeResult[] | null>(null)
   const [running, setRunning] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -67,6 +69,12 @@ export default function SpotifyDiagnostics() {
           </button>
         )}
       </div>
+
+      {profileNote && (
+        <div className="banner tiny" style={{ marginTop: 10 }}>
+          {profileNote} Playlists may still work — try <strong>Import songs</strong>.
+        </div>
+      )}
 
       {granted.length > 0 && missing.length > 0 && (
         <div className="banner error tiny" style={{ marginTop: 10 }}>

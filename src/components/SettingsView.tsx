@@ -9,7 +9,7 @@ import { loadToken } from '../spotify/auth.ts'
 
 export default function SettingsView() {
   const { state, plan, dispatch, exportJson, importJson } = useStore()
-  const { status, user, disconnect, redirectUri, error: connectionError } = useSpotify()
+  const { status, user, disconnect, redirectUri, error: connectionError, profileNote } = useSpotify()
   // A rejected account still has a token; without this the panel below would
   // send them back to the connect button in a loop instead of explaining.
   const hasToken = Boolean(loadToken())
@@ -79,8 +79,8 @@ export default function SettingsView() {
               <div className="row" style={{ marginTop: 10 }}>
                 {user?.image ? <img className="art" src={user.image} alt="" /> : <div className="art">♪</div>}
                 <div className="grow">
-                  <div className="track-name">{user?.displayName}</div>
-                  <div className="track-sub">Connected</div>
+                  <div className="track-name">{user?.displayName ?? 'Spotify account'}</div>
+                  <div className="track-sub">{profileNote ? 'Connected — profile unavailable' : 'Connected'}</div>
                 </div>
                 <button className="btn" onClick={disconnect}>
                   Disconnect

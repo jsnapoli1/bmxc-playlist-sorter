@@ -32,6 +32,8 @@ type SpotifyValue = {
   clientIdOverride: string
   /** True when the deployment ships with a Client ID, so users just sign in. */
   hasBuiltInClientId: boolean
+  /** Set when the profile call failed but playlists may still work. */
+  profileNote: string | null
   redirectUri: string
   playlists: SpotifyPlaylist[]
   playlistsLoading: boolean
@@ -65,6 +67,9 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([])
   const [playlistsLoading, setPlaylistsLoading] = useState(false)
 
+  /** Non-blocking note: the profile call failed but the connection is usable. */
+  const [profileNote, setProfileNote] = useState<string | null>(null)
+
   // Handle the redirect back from Spotify, then load the profile.
   useEffect(() => {
     let cancelled = false
@@ -82,15 +87,23 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
         if (!cancelled) setStatus('idle')
         return
       }
+      // Holding a usable token is what "connected" means. The profile is
+      // only a display name and avatar — it has no functional use since
+      // playlists are created through /me/playlists — so a failure there
+      // must not take down playlist access with it.
+      if (!cancelled) setStatus('connected')
       try {
         const me = await getMe()
-        if (cancelled) return
-        setUser(me)
-        setStatus('connected')
+        if (!cancelled) {
+          setUser(me)
+          setProfileNote(null)
+        }
       } catch (err) {
         if (cancelled) return
-        setError(err instanceof Error ? err.message : String(err))
-        setStatus(isConnected() ? 'error' : 'idle')
+        setUser(null)
+        setProfileNote(
+          `Could not read your Spotify profile: ${err instanceof Error ? err.message : String(err)}`,
+        )
       }
     })()
     return () => {
@@ -154,6 +167,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
       clientId,
       clientIdOverride,
       hasBuiltInClientId: hasBuiltInClientId(),
+      profileNote,
       redirectUri: redirectUri(),
       playlists,
       playlistsLoading,
@@ -170,6 +184,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
       error,
       clientId,
       clientIdOverride,
+      profileNote,
       playlists,
       playlistsLoading,
       setClientId,
