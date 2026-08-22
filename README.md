@@ -119,8 +119,50 @@ into days by date.
   covered by tests in `test/`.
 - Spotify PKCE auth in `src/spotify/auth.ts`; API calls in `src/spotify/api.ts`.
 
-### Deploying
+## Deploying to Cloudflare Workers
 
-`npm run build` emits a static `dist/` you can host anywhere. To serve from a
-subpath (GitHub Pages, say), build with `APP_BASE=/bmxc-playlist-sorter/ npm run build` —
-then register that URL as the redirect URI in your Spotify app.
+The repo is configured for Cloudflare Workers static assets (`wrangler.jsonc`).
+It is an **assets-only Worker** — Cloudflare serves the built files from its edge
+with no Worker invocation per request, so there is no request billing and no
+server code to maintain.
+
+```bash
+npx wrangler login     # one-time, opens a browser
+npm run deploy         # builds, then wrangler deploy
+```
+
+That publishes to `https://bmxc-playlist-sorter.<your-subdomain>.workers.dev`.
+
+In CI, or anywhere a browser login isn't possible, set a `CLOUDFLARE_API_TOKEN`
+(the **Edit Cloudflare Workers** template is the right scope) and
+`CLOUDFLARE_ACCOUNT_ID` instead of running `wrangler login`.
+
+**After the first deploy, add the deployed URL to your Spotify app** as a redirect
+URI — the login flow will fail until you do. Open the app's **Settings** tab; it
+shows the exact URI to paste, including the trailing slash. Local development and
+the deployed site each need their own entry:
+
+- `http://127.0.0.1:5173/` — dev server
+- `https://bmxc-playlist-sorter.<your-subdomain>.workers.dev/` — deployed
+
+Other commands:
+
+| Command | What it does |
+| --- | --- |
+| `npm run cf:dev` | Build and serve through the local Workers runtime, headers and all |
+| `npm run cf:whoami` | Show which Cloudflare account wrangler is signed in to |
+
+### Headers
+
+`public/_headers` is copied into the build and applied by Cloudflare. It sets a
+Content-Security-Policy scoped to what the app actually needs (Spotify's API,
+accounts, and image CDNs), plus `nosniff`, `frame-ancestors 'none'`, and a
+one-year immutable cache on hashed assets. If you add a feature that talks to
+another origin, widen `connect-src` there or it will be blocked.
+
+### Hosting somewhere else
+
+`npm run build` emits a plain static `dist/` that any host will serve. To serve
+from a subpath (GitHub Pages, say), build with
+`APP_BASE=/bmxc-playlist-sorter/ npm run build` — then register that URL as the
+redirect URI in your Spotify app.
