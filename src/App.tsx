@@ -115,7 +115,9 @@ function Shell() {
           onClick={() => {
             // With a Client ID shipped in the build there is nothing to set up,
             // so go straight to Spotify instead of via the Settings tab.
-            if (status !== 'connected' && hasBuiltInClientId) void connect()
+            // 'error' means we hold a token Spotify rejects; another login
+            // round-trip changes nothing, so show the diagnostics instead.
+            if (status === 'idle' && hasBuiltInClientId) void connect()
             else setTab('settings')
           }}
           title={status === 'connected' ? 'Spotify connected' : 'Connect Spotify'}

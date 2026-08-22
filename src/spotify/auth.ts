@@ -12,6 +12,10 @@ const TOKEN_KEY = 'cps.spotify.token'
 const STATE_KEY = 'cps.spotify.state'
 
 export const SCOPES = [
+  // Reading /me needs these; without them Spotify can reject the profile call
+  // outright rather than just omitting fields.
+  'user-read-private',
+  'user-read-email',
   'playlist-read-private',
   'playlist-read-collaborative',
   'playlist-modify-private',
