@@ -76,13 +76,27 @@ PKCE public clients are designed for exactly this, there is no client secret
 anywhere in this app, and Spotify will only ever return an authorization code to
 a redirect URI registered on the app — which only its owner can add.
 
-> **Spotify's 25-user limit.** A new Spotify app starts in **Development
-> mode**, which allows at most 25 users, and *each one must be added by name
-> and email* under **User Management** in your app's dashboard settings.
-> Anyone not on that list gets an error at the Spotify login screen rather than
-> in this app, so add your music staff before camp starts. Lifting the limit
-> means requesting **Extended Quota Mode** from Spotify, which is a review
-> process intended for organizations.
+> **Development mode limits (as of February 2026).** A new Spotify app allows
+> **five** authorized users, each added by name and email under **User
+> Management** in the app's dashboard settings, and the **app owner must hold an
+> active Spotify Premium subscription** or the app stops working. Accounts that
+> are not on the allowlist can complete the Spotify login but then get `403`
+> on every API call. Extended Quota Mode lifts the cap and costs nothing, but
+> Spotify only accepts applications from registered organizations with 250,000+
+> monthly active users, so it is out of reach for a camp.
+>
+> Only people who **import playlists** need a slot. Reading the run sheet,
+> editing notes, and printing need no Spotify account at all.
+
+> **February 2026 API migration.** Spotify renamed several endpoints and
+> removed the old ones for Development mode apps, which returned `403` after
+> 9 March 2026. This app uses the current ones:
+> `GET /playlists/{id}/items` (was `/tracks`, with each entry's `track` key now
+> `item`), `POST /playlists/{id}/items` (was `/tracks`), and
+> `POST /me/playlists` (was `POST /users/{id}/playlists`). Spotify also now
+> returns playlist *contents* only for playlists you own — someone else's
+> comes back as metadata with no songs, so save a copy to your own account
+> first. The app explains this rather than importing nothing.
 
 #### Fallback: each user brings their own Spotify app
 

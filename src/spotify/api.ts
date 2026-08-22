@@ -7,6 +7,8 @@ export type SpotifyPlaylist = {
   id: string
   name: string
   owner: string
+  /** Spotify user id of the owner, to tell your own playlists from others'. */
+  ownerId: string
   image?: string
   trackCount: number
   collaborative: boolean
@@ -41,14 +43,26 @@ async function call<T>(path: string, init: RequestInit = {}, retry = true): Prom
     throw new Error('Spotify session expired — please connect again.')
   }
   if (!res.ok) {
-    let message = `Spotify request failed (${res.status})`
+    let detail = ''
     try {
       const body = (await res.json()) as { error?: { message?: string } }
-      if (body.error?.message) message = body.error.message
+      detail = body.error?.message ?? ''
     } catch {
       /* response had no JSON body */
     }
-    throw new Error(message)
+    if (res.status === 403) {
+      // Spotify's own text is often just "Forbidden", which tells nobody
+      // anything. In Development mode this almost always means the account
+      // is not on the app's allowlist.
+      throw new Error(
+        [
+          detail && detail.toLowerCase() !== 'forbidden' ? `Spotify said: ${detail}.` : 'Spotify refused that request (403).',
+          'In Development mode only accounts added under User Management in the Spotify app dashboard may use the app,',
+          "and the app owner's Spotify Premium subscription must be active.",
+        ].join(' '),
+      )
+    }
+    throw new Error(detail || `Spotify request failed (${res.status})`)
   }
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
@@ -90,37 +104,39 @@ type RawPlaylist = {
   name: string
   owner: { display_name: string | null; id: string }
   images: { url: string }[] | null
-  tracks: { total: number }
+  /** Renamed to `items` in the Feb 2026 API; accept either. */
+  tracks?: { total: number }
+  items?: { total: number }
   collaborative: boolean
   public: boolean | null
+}
+
+function playlistTotal(p: RawPlaylist): number {
+  return p.items?.total ?? p.tracks?.total ?? 0
+}
+
+function toPlaylist(p: RawPlaylist): SpotifyPlaylist {
+  return {
+    id: p.id,
+    name: p.name,
+    owner: p.owner?.display_name || p.owner?.id || '',
+    ownerId: p.owner?.id ?? '',
+    image: p.images?.[0]?.url,
+    trackCount: playlistTotal(p),
+    collaborative: p.collaborative,
+    isPublic: p.public,
+  }
 }
 
 export async function getMyPlaylists(
   onProgress?: (loaded: number, total: number) => void,
 ): Promise<SpotifyPlaylist[]> {
   const items = await pageAll<RawPlaylist | null>('/me/playlists?limit=50', onProgress)
-  return items.filter(Boolean).map((p) => ({
-    id: p!.id,
-    name: p!.name,
-    owner: p!.owner.display_name || p!.owner.id,
-    image: p!.images?.[0]?.url,
-    trackCount: p!.tracks.total,
-    collaborative: p!.collaborative,
-    isPublic: p!.public,
-  }))
+  return items.filter((p): p is RawPlaylist => Boolean(p)).map(toPlaylist)
 }
 
 export async function getPlaylist(id: string): Promise<SpotifyPlaylist> {
-  const p = await call<RawPlaylist>(`/playlists/${id}?fields=id,name,owner,images,tracks(total),collaborative,public`)
-  return {
-    id: p.id,
-    name: p.name,
-    owner: p.owner.display_name || p.owner.id,
-    image: p.images?.[0]?.url,
-    trackCount: p.tracks.total,
-    collaborative: p.collaborative,
-    isPublic: p.public,
-  }
+  return toPlaylist(await call<RawPlaylist>(`/playlists/${id}`))
 }
 
 type RawTrack = {
@@ -154,21 +170,29 @@ function toTrack(raw: RawTrack, sourceId?: string): Track | null {
   }
 }
 
+/**
+ * Read every song in a playlist.
+ *
+ * Spotify's February 2026 API renamed `/playlists/{id}/tracks` to
+ * `/playlists/{id}/items`, and each entry's `track` key to `item`; the old
+ * path now returns 403 for Development mode apps. The `fields` filter is
+ * deliberately omitted rather than rewritten, so this keeps working whichever
+ * shape an account is served.
+ */
 export async function getPlaylistTracks(
   playlistId: string,
   onProgress?: (loaded: number, total: number) => void,
 ): Promise<Track[]> {
-  const fields =
-    'items(track(id,uri,name,duration_ms,explicit,preview_url,type,is_local,artists(name),album(name,images))),next,total'
-  const items = await pageAll<{ track: RawTrack | null }>(
-    `/playlists/${playlistId}/tracks?limit=100&fields=${encodeURIComponent(fields)}`,
+  const entries = await pageAll<{ item?: RawTrack | null; track?: RawTrack | null }>(
+    `/playlists/${playlistId}/items?limit=100`,
     onProgress,
   )
   const tracks: Track[] = []
   const seen = new Set<string>()
-  for (const item of items) {
-    if (!item?.track) continue
-    const track = toTrack(item.track, playlistId)
+  for (const entry of entries) {
+    const raw = entry?.item ?? entry?.track
+    if (!raw) continue
+    const track = toTrack(raw, playlistId)
     if (track && !seen.has(track.id)) {
       seen.add(track.id)
       tracks.push(track)
@@ -177,24 +201,21 @@ export async function getPlaylistTracks(
   return tracks
 }
 
-export async function searchTracks(query: string, limit = 20): Promise<Track[]> {
-  if (!query.trim()) return []
-  const res = await call<{ tracks: { items: RawTrack[] } }>(
-    `/search?type=track&limit=${limit}&q=${encodeURIComponent(query)}`,
-  )
-  return res.tracks.items.map((t) => toTrack(t)).filter((t): t is Track => Boolean(t))
-}
-
-/** Create a playlist and fill it — used to push a block or day back to Spotify. */
+/**
+ * Create a playlist and fill it — used to push a block or day to Spotify.
+ *
+ * Uses `POST /me/playlists`; the old `POST /users/{id}/playlists` was removed
+ * in February 2026 and now answers "You cannot create a playlist for another
+ * user". Songs are added through `/items` for the same reason.
+ */
 export async function createPlaylistWithTracks(args: {
   name: string
   description: string
   uris: string[]
   isPublic?: boolean
 }): Promise<{ id: string; url: string }> {
-  const me = await getMe()
-  const playlist = await call<{ id: string; external_urls: { spotify: string } }>(
-    `/users/${me.id}/playlists`,
+  const playlist = await call<{ id: string; external_urls?: { spotify?: string } }>(
+    '/me/playlists',
     {
       method: 'POST',
       body: JSON.stringify({
@@ -206,10 +227,13 @@ export async function createPlaylistWithTracks(args: {
   )
 
   for (let i = 0; i < args.uris.length; i += 100) {
-    await call(`/playlists/${playlist.id}/tracks`, {
+    await call(`/playlists/${playlist.id}/items`, {
       method: 'POST',
       body: JSON.stringify({ uris: args.uris.slice(i, i + 100) }),
     })
   }
-  return { id: playlist.id, url: playlist.external_urls.spotify }
+  return {
+    id: playlist.id,
+    url: playlist.external_urls?.spotify ?? `https://open.spotify.com/playlist/${playlist.id}`,
+  }
 }
