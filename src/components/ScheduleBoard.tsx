@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useStore } from '../lib/store.tsx'
 import { categoryColor, type Block } from '../lib/types.ts'
 import { blockMinutes, formatMinutes, formatRange, minutesOf } from '../lib/time.ts'
@@ -8,6 +8,8 @@ type Props = {
   selectedBlockId: string | null
   onSelectBlock: (id: string | null) => void
   onOpenImport: () => void
+  /** Rendered above the days; used on mobile, where the top bar has no room. */
+  toolbar?: ReactNode
 }
 
 function BlockCard({
@@ -111,12 +113,18 @@ function BlockCard({
   )
 }
 
-export default function ScheduleBoard({ selectedBlockId, onSelectBlock, onOpenImport }: Props) {
+export default function ScheduleBoard({
+  selectedBlockId,
+  onSelectBlock,
+  onOpenImport,
+  toolbar,
+}: Props) {
   const { plan, dispatch } = useStore()
 
   if (!plan.days.length) {
     return (
       <section className="board">
+        {toolbar}
         <div className="page">
           <div className="page-inner">
             <div className="empty-state">
@@ -141,6 +149,7 @@ export default function ScheduleBoard({ selectedBlockId, onSelectBlock, onOpenIm
 
   return (
     <section className="board">
+      {toolbar}
       <div className="days">
         {plan.days.map((day, dayIndex) => {
           const blocks = plan.blocks
