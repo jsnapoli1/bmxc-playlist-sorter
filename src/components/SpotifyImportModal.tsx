@@ -1,0 +1,178 @@
+import { useMemo, useState } from 'react'
+import { useStore } from '../lib/store.tsx'
+import { useSpotify } from '../spotify/SpotifyProvider.tsx'
+import { getPlaylist, getPlaylistTracks, type SpotifyPlaylist } from '../spotify/api.ts'
+import SpotifySetup from './SpotifySetup.tsx'
+
+/** Accepts a playlist id, a spotify: URI, or an open.spotify.com link. */
+export function parsePlaylistRef(input: string): string | null {
+  const s = input.trim()
+  if (!s) return null
+  const uri = s.match(/^spotify:playlist:([A-Za-z0-9]+)/)
+  if (uri) return uri[1]
+  const url = s.match(/open\.spotify\.com\/(?:[a-z-]+\/)?playlist\/([A-Za-z0-9]+)/)
+  if (url) return url[1]
+  if (/^[A-Za-z0-9]{16,}$/.test(s)) return s
+  return null
+}
+
+export default function SpotifyImportModal({ onClose }: { onClose: () => void }) {
+  const { plan, dispatch } = useStore()
+  const { status, playlists, playlistsLoading, refreshPlaylists } = useSpotify()
+  const [query, setQuery] = useState('')
+  const [manual, setManual] = useState('')
+  const [busy, setBusy] = useState<string | null>(null)
+  const [progress, setProgress] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState<string | null>(null)
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return playlists.filter((p) => (!q ? true : `${p.name} ${p.owner}`.toLowerCase().includes(q)))
+  }, [playlists, query])
+
+  const importPlaylist = async (playlist: SpotifyPlaylist) => {
+    setBusy(playlist.id)
+    setError(null)
+    setDone(null)
+    try {
+      const tracks = await getPlaylistTracks(playlist.id, (loaded, total) =>
+        setProgress(`Loading ${loaded} of ${total} songs…`),
+      )
+      dispatch({ type: 'addTracks', tracks })
+      dispatch({
+        type: 'addSource',
+        source: {
+          id: playlist.id,
+          name: playlist.name,
+          owner: playlist.owner,
+          image: playlist.image,
+          trackCount: tracks.length,
+          importedAt: Date.now(),
+        },
+      })
+      setDone(`Added ${tracks.length} songs from “${playlist.name}”.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+      setProgress('')
+    }
+  }
+
+  const importManual = async () => {
+    const id = parsePlaylistRef(manual)
+    if (!id) {
+      setError('That does not look like a Spotify playlist link or ID.')
+      return
+    }
+    setBusy(id)
+    setError(null)
+    try {
+      const playlist = await getPlaylist(id)
+      await importPlaylist(playlist)
+      setManual('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="row" style={{ marginBottom: 12 }}>
+          <h2 className="grow">Import songs from Spotify</h2>
+          <button className="btn ghost" onClick={onClose}>
+            ×
+          </button>
+        </div>
+
+        {status !== 'connected' ? (
+          <SpotifySetup />
+        ) : (
+          <>
+            {error && <div className="banner error tiny">{error}</div>}
+            {done && <div className="banner ok tiny">{done}</div>}
+
+            <div className="row" style={{ marginBottom: 10 }}>
+              <input
+                type="search"
+                placeholder="Filter your playlists…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              <button className="btn sm" onClick={() => void refreshPlaylists()} disabled={playlistsLoading}>
+                {playlistsLoading ? '…' : 'Refresh'}
+              </button>
+            </div>
+
+            {plan.sources.length > 0 && (
+              <div className="row wrap tiny faint" style={{ marginBottom: 10 }}>
+                Already imported:
+                {plan.sources.map((s) => (
+                  <span className="pill" key={s.id}>
+                    {s.name} · {s.trackCount}
+                    <button
+                      className="btn ghost icon sm"
+                      title="Remove these songs from the library"
+                      onClick={() => dispatch({ type: 'removeSource', id: s.id })}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="playlist-grid">
+              {filtered.map((p) => (
+                <button
+                  className="playlist-card"
+                  key={p.id}
+                  disabled={busy !== null}
+                  onClick={() => void importPlaylist(p)}
+                >
+                  {p.image ? <img className="art" src={p.image} alt="" /> : <div className="art">♪</div>}
+                  <div className="track-meta">
+                    <div className="track-name truncate">{p.name}</div>
+                    <div className="track-sub truncate">
+                      {busy === p.id ? progress || 'Loading…' : `${p.trackCount} songs · ${p.owner}`}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+            {!playlistsLoading && !filtered.length && (
+              <div className="empty-state">No playlists matched.</div>
+            )}
+
+            <div className="section-label">Or paste a playlist link</div>
+            <div className="row">
+              <input
+                type="text"
+                placeholder="https://open.spotify.com/playlist/…"
+                value={manual}
+                onChange={(e) => setManual(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && void importManual()}
+              />
+              <button className="btn" onClick={() => void importManual()} disabled={busy !== null}>
+                Add
+              </button>
+            </div>
+            <div className="hint">
+              Works for any playlist you can open in Spotify, including collaborative camp
+              playlists shared with you.
+            </div>
+          </>
+        )}
+
+        <div className="row" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
+          <button className="btn primary" onClick={onClose}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
