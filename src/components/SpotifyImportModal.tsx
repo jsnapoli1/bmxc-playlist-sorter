@@ -18,7 +18,14 @@ export function parsePlaylistRef(input: string): string | null {
 
 export default function SpotifyImportModal({ onClose }: { onClose: () => void }) {
   const { plan, dispatch } = useStore()
-  const { status, playlists, playlistsLoading, refreshPlaylists } = useSpotify()
+  const {
+    status,
+    user,
+    playlists,
+    playlistsLoading,
+    refreshPlaylists,
+    error: connectionError,
+  } = useSpotify()
   const [query, setQuery] = useState('')
   const [manual, setManual] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
@@ -39,6 +46,19 @@ export default function SpotifyImportModal({ onClose }: { onClose: () => void })
       const tracks = await getPlaylistTracks(playlist.id, (loaded, total) =>
         setProgress(`Loading ${loaded} of ${total} songs…`),
       )
+
+      // Since February 2026 Spotify returns the songs of your own playlists
+      // only; someone else's comes back as metadata with no contents.
+      if (!tracks.length) {
+        const mine = user && playlist.ownerId === user.id
+        setError(
+          mine
+            ? `“${playlist.name}” came back empty — it may have no songs in it.`
+            : `Spotify only returns the songs of playlists you own. “${playlist.name}” belongs to ${playlist.owner}, so its songs can't be read. Save a copy to your own account in Spotify, then import that copy.`,
+        )
+        return
+      }
+
       dispatch({ type: 'addTracks', tracks })
       dispatch({
         type: 'addSource',
@@ -92,7 +112,11 @@ export default function SpotifyImportModal({ onClose }: { onClose: () => void })
           <SpotifySetup />
         ) : (
           <>
-            {error && <div className="banner error tiny">{error}</div>}
+            {/* Errors from loading the playlist list live on the provider;
+                without this they failed silently behind an empty grid. */}
+            {(error || connectionError) && (
+              <div className="banner error tiny">{error || connectionError}</div>
+            )}
             {done && <div className="banner ok tiny">{done}</div>}
 
             <div className="row" style={{ marginBottom: 10 }}>
