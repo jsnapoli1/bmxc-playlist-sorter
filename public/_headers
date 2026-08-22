@@ -1,0 +1,14 @@
+# Served by Cloudflare Workers static assets (and Pages). Vite copies this
+# file from public/ into dist/ at build time.
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()
+  Cross-Origin-Opener-Policy: same-origin
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.scdn.co https://*.spotifycdn.com https://platform-lookaside.fbsbx.com; connect-src 'self' https://api.spotify.com https://accounts.spotify.com; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+
+# Hashed filenames never change contents, so they can be cached hard.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
