@@ -48,23 +48,50 @@ Other scripts:
 
 ### Connecting Spotify
 
-The app is entirely client-side, so there is no shared client secret — it uses the
-Authorization Code + PKCE flow with a Client ID you supply. One-time setup:
+There are two ways to run this, and the right one depends on who uses it.
+
+#### Recommended: one Spotify app for everyone (what camp staff should see)
+
+Register a single Spotify app yourself and bake its Client ID into the build.
+Everyone else then sees one button — **Connect Spotify** — and never touches a
+developer dashboard.
 
 1. Open the [Spotify developer dashboard](https://developer.spotify.com/dashboard)
-   and **Create app** (any name).
-2. Add the redirect URI the app shows you under **Settings → Spotify** — for local
-   development that is `http://127.0.0.1:5173/`. It must match exactly.
-   Tick **Web API**, then save.
-3. Paste the app's **Client ID** into the app and click **Connect to Spotify**.
+   and **Create app**. Tick **Web API**.
+2. Add your deployed URL as a **Redirect URI**, trailing slash included:
+   `https://<your-worker>.workers.dev/`. Add `http://127.0.0.1:5173/` too if you
+   develop locally.
+3. Copy the **Client ID** and set it as `VITE_SPOTIFY_CLIENT_ID` at build time.
+   On Cloudflare, that is **Worker → Settings → Build → Build variables and
+   secrets**; it takes effect on the next deploy. Locally, copy `.env.example`
+   to `.env`.
 
-The Client ID and the resulting tokens stay in your browser's `localStorage`.
+The Client ID ends up in the JavaScript bundle, which is correct and safe: PKCE
+public clients are designed for exactly this, there is no client secret
+involved, and Spotify will only ever return a code to a redirect URI you
+registered.
+
+> **Spotify's 25-user limit.** A new Spotify app starts in **Development
+> mode**, which allows at most 25 users, and *each one must be added by name
+> and email* under **User Management** in your app's dashboard settings.
+> Anyone not on that list gets an error at the Spotify login screen rather than
+> in this app, so add your music staff before camp starts. Lifting the limit
+> means requesting **Extended Quota Mode** from Spotify, which is a review
+> process intended for organizations.
+
+#### Fallback: each user brings their own Spotify app
+
+If `VITE_SPOTIFY_CLIENT_ID` is not set, the app shows a short setup wizard
+instead: create an app, register the redirect URI it prints, paste the Client
+ID. That path still works and is what you get running from a fresh clone. It is
+also reachable behind **Use my own Spotify app instead** on the connect screen,
+for anyone who would rather not be on your app's user list.
+
+Either way, the Client ID and the resulting tokens live only in that browser's
+`localStorage`.
 
 Scopes requested: `playlist-read-private`, `playlist-read-collaborative`,
 `playlist-modify-private`, `playlist-modify-public`.
-
-To bake in a Client ID for a deployed copy, set `VITE_SPOTIFY_CLIENT_ID` at build
-time; the in-app field still overrides it.
 
 ## Schedule formats
 
@@ -149,8 +176,10 @@ In CI, or anywhere a browser login isn't possible, set a `CLOUDFLARE_API_TOKEN`
 
 **After the first deploy, add the deployed URL to your Spotify app** as a redirect
 URI — the login flow will fail until you do. Open the app's **Settings** tab; it
-shows the exact URI to paste, including the trailing slash. Local development and
-the deployed site each need their own entry:
+shows the exact URI to paste, including the trailing slash. Set
+`VITE_SPOTIFY_CLIENT_ID` as a build variable at the same time (see
+[Connecting Spotify](#connecting-spotify)) so users get a single Connect button.
+Local development and the deployed site each need their own redirect entry:
 
 - `http://127.0.0.1:5173/` — dev server
 - `https://bmxc-playlist-sorter.<your-subdomain>.workers.dev/` — deployed

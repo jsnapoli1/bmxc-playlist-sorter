@@ -14,7 +14,7 @@ type Tab = 'plan' | 'run' | 'settings'
 
 function Shell() {
   const { state, plan, dispatch } = useStore()
-  const { status, user } = useSpotify()
+  const { status, user, connect, hasBuiltInClientId } = useSpotify()
   const [tab, setTab] = useState<Tab>('plan')
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
   const [scheduleModal, setScheduleModal] = useState(false)
@@ -112,7 +112,12 @@ function Shell() {
 
         <button
           className="btn sm"
-          onClick={() => setTab('settings')}
+          onClick={() => {
+            // With a Client ID shipped in the build there is nothing to set up,
+            // so go straight to Spotify instead of via the Settings tab.
+            if (status !== 'connected' && hasBuiltInClientId) void connect()
+            else setTab('settings')
+          }}
           title={status === 'connected' ? 'Spotify connected' : 'Connect Spotify'}
         >
           <span
