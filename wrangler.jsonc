@@ -18,13 +18,20 @@
   // redirect URI — so keep exactly one URL to register.
   "preview_urls": false,
 
-  // The SPA is served from the edge; the Worker only runs for /api/*.
-  // `run_worker_first` is not set, so asset requests never invoke it.
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
     // Deep links like /join/<token> still resolve to index.html.
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+
+    // Without this, the asset layer answers browser *navigations* to
+    // /api/* with index.html via the SPA fallback and the Worker never
+    // runs — so clicking "Sign in with Spotify" loaded the app again
+    // instead of redirecting to Spotify. curl saw the right 302 because
+    // it does not send Sec-Fetch-Mode: navigate. Route /api/* to the
+    // Worker first; everything else is still served straight from the
+    // edge with no Worker invocation.
+    "run_worker_first": ["/api/*"]
   },
 
   "d1_databases": [
