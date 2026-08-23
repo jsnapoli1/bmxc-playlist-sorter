@@ -123,6 +123,22 @@ export class PlanRoom implements DurableObject {
       return new Response((err as Error).message, { status: 404 })
     }
 
+    // The Worker calls this when the owner points the plan at a playlist,
+    // so a room that loaded before that learns about it without waiting
+    // for a restart.
+    if (url.searchParams.get('event') === 'playlist-changed') {
+      const next = url.searchParams.get('playlistId') || null
+      this.spotifyPlaylistId = next
+      this.syncFailures = 0
+      this.setSync({
+        status: next ? 'idle' : 'off',
+        error: null,
+        playlistName: null,
+      })
+      if (next) this.scheduleSync()
+      return new Response(null, { status: 204 })
+    }
+
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('Expected a WebSocket upgrade.', { status: 426 })
     }
@@ -241,8 +257,11 @@ export class PlanRoom implements DurableObject {
 
     // Only a change to the master order can affect Spotify; block edits and
     // notes never do.
-    if (this.spotifyPlaylistId && this.masterOrderChanged(before, this.plan)) {
+    const orderChanged = this.masterOrderChanged(before, this.plan)
+    if (this.spotifyPlaylistId && orderChanged) {
       this.scheduleSync()
+    } else if (orderChanged) {
+      console.log(`sync skipped: plan=${this.planId} has no Spotify playlist set`)
     }
   }
 
@@ -286,6 +305,7 @@ export class PlanRoom implements DurableObject {
     if (!this.plan || !this.spotifyPlaylistId) return
     this.syncRunning = true
     this.setSync({ status: 'syncing', error: null })
+    console.log(`sync start: plan=${this.planId} playlist=${this.spotifyPlaylistId}`)
 
     try {
       const spotify = await this.ownerClient()
@@ -308,6 +328,10 @@ export class PlanRoom implements DurableObject {
 
       const moves = reorderMoves(current, target)
       const absent = missingFromSpotify(current, target)
+      console.log(
+        `sync diff: plan=${this.planId} spotify=${current.length} app=${target.length} ` +
+          `moves=${moves.length} missing=${absent.length}`,
+      )
 
       let snapshot = meta.snapshot_id
       for (const move of moves) {
@@ -318,6 +342,7 @@ export class PlanRoom implements DurableObject {
       }
 
       this.syncFailures = 0
+      console.log(`sync done: plan=${this.planId} moves=${moves.length}`)
       this.setSync({
         status: 'synced',
         lastSyncedAt: Date.now(),
@@ -331,6 +356,10 @@ export class PlanRoom implements DurableObject {
     } catch (err) {
       const error = err as SpotifyError
       this.syncFailures += 1
+      console.log(
+        `sync failed: plan=${this.planId} status=${error.status ?? '?'} ` +
+          `permanent=${error instanceof SpotifyError && error.permanent} message=${error.message}`,
+      )
       const permanent = error instanceof SpotifyError && error.permanent
       const exhausted = this.syncFailures >= MAX_SYNC_FAILURES
 

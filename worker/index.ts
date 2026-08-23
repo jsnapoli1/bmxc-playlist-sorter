@@ -404,6 +404,20 @@ async function setPlaylist(request: Request, env: Env, session: Session): Promis
     .bind(playlistId, Date.now(), session.planId)
     .run()
 
+  // Tell the live room, which cached the old value when it loaded.
+  try {
+    const room = env.PLAN_ROOM.get(env.PLAN_ROOM.idFromName(session.planId))
+    const notify = new URL(request.url)
+    notify.searchParams.set('plan', session.planId)
+    notify.searchParams.set('event', 'playlist-changed')
+    if (playlistId) notify.searchParams.set('playlistId', playlistId)
+    else notify.searchParams.delete('playlistId')
+    await room.fetch(new Request(notify.toString()))
+  } catch (err) {
+    // The plan is saved either way; the room picks it up on next start.
+    console.log(`setPlaylist: could not notify room — ${(err as Error).message}`)
+  }
+
   return json({ playlistId })
 }
 
