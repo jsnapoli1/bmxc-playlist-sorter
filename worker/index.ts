@@ -398,6 +398,104 @@ async function setPlaylist(request: Request, env: Env, session: Session): Promis
   return json({ playlistId })
 }
 
+/**
+ * Every plan this session's owner has.
+ *
+ * A collaborator only ever sees the one plan their link was for, so this
+ * is owner-only: listing an owner's other plans to someone holding a share
+ * link would leak playlists they were never invited to.
+ */
+async function listPlans(env: Env, session: Session): Promise<Response> {
+  if (session.role !== 'owner') return fail('Only the plan owner can see other playlists.', 403)
+
+  const owner = await env.DB.prepare('SELECT owner_id FROM plans WHERE id = ?')
+    .bind(session.planId)
+    .first<{ owner_id: string }>()
+  if (!owner) return fail('Plan not found.', 404)
+
+  const rows = await env.DB.prepare(
+    'SELECT id, name, spotify_playlist_id, updated_at FROM plans WHERE owner_id = ? ORDER BY created_at',
+  )
+    .bind(owner.owner_id)
+    .all<{ id: string; name: string; spotify_playlist_id: string | null; updated_at: number }>()
+
+  return json({ plans: rows.results ?? [], activePlanId: session.planId })
+}
+
+/** Start another plan for the same owner, and switch this session to it. */
+async function createPlan(request: Request, env: Env, session: Session, url: URL): Promise<Response> {
+  if (session.role !== 'owner') return fail('Only the plan owner can start another playlist.', 403)
+
+  const body = (await request.json().catch(() => ({}))) as { name?: string }
+  const name = (body.name ?? '').trim().slice(0, 100) || 'New playlist'
+
+  const owner = await env.DB.prepare('SELECT owner_id FROM plans WHERE id = ?')
+    .bind(session.planId)
+    .first<{ owner_id: string }>()
+  if (!owner) return fail('Plan not found.', 404)
+
+  const now = Date.now()
+  const planId = `plan_${randomToken(12)}`
+  const doc = emptyPlan(planId, name)
+  await env.DB.prepare(
+    'INSERT INTO plans (id, owner_id, name, doc, rev, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)',
+  )
+    .bind(planId, owner.owner_id, name, JSON.stringify(doc), now, now)
+    .run()
+
+  return switchTo(env, session, planId, url, owner.owner_id)
+}
+
+/**
+ * Point this session at another of the owner's plans.
+ *
+ * A session is bound to one plan, so switching means issuing a new session
+ * for the target. The old collaborator row is dropped rather than left
+ * behind as a stale grant.
+ */
+async function switchTo(
+  env: Env,
+  session: Session,
+  planId: string,
+  url: URL,
+  knownOwnerId?: string,
+): Promise<Response> {
+  if (session.role !== 'owner') return fail('Only the plan owner can switch playlists.', 403)
+
+  const ownerId =
+    knownOwnerId ??
+    (
+      await env.DB.prepare('SELECT owner_id FROM plans WHERE id = ?')
+        .bind(session.planId)
+        .first<{ owner_id: string }>()
+    )?.owner_id
+
+  const target = await env.DB.prepare('SELECT id, owner_id, name FROM plans WHERE id = ?')
+    .bind(planId)
+    .first<{ id: string; owner_id: string; name: string }>()
+
+  // Only ever switch between plans the same account owns.
+  if (!target || !ownerId || target.owner_id !== ownerId) {
+    return fail('That playlist does not belong to this account.', 403)
+  }
+
+  const now = Date.now()
+  const sessionToken = randomToken(32)
+  await env.DB.prepare(
+    `INSERT INTO collaborators (id, plan_id, display_name, role, session_hash, created_at, last_seen_at)
+     VALUES (?, ?, ?, 'owner', ?, ?, ?)`,
+  )
+    .bind(`col_${randomToken(12)}`, planId, session.displayName, await sha256Hex(sessionToken), now, now)
+    .run()
+
+  await env.DB.prepare('DELETE FROM collaborators WHERE id = ?').bind(session.collaboratorId).run()
+
+  return json(
+    { planId, name: target.name },
+    { headers: { 'Set-Cookie': setCookie(SESSION_COOKIE, sessionToken, SESSION_MAX_AGE, isSecure(url)) } },
+  )
+}
+
 // --- entrypoint --------------------------------------------------------
 
 export default {
@@ -441,6 +539,16 @@ export default {
         planName: plan?.name ?? '',
         spotifyPlaylistId: plan?.spotify_playlist_id ?? null,
       })
+    }
+
+    if (path === '/api/plans') {
+      if (request.method === 'GET') return listPlans(env, session)
+      if (request.method === 'POST') return createPlan(request, env, session, url)
+    }
+
+    const switchMatch = path.match(/^\/api\/plans\/([A-Za-z0-9_]+)\/open$/)
+    if (switchMatch && request.method === 'POST') {
+      return switchTo(env, session, switchMatch[1], url)
     }
 
     if (path === '/api/links') {

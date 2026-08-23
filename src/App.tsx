@@ -16,6 +16,7 @@ import type { SessionInfo } from './Root.tsx'
 import type { SharedPlan } from './lib/useSharedPlan.ts'
 import { planLabel } from './lib/planMigration.ts'
 import type { AuthError } from './lib/authError.ts'
+import SharedPlanPicker from './components/SharedPlanPicker.tsx'
 
 type Tab = 'plan' | 'playlist' | 'run' | 'settings'
 
@@ -76,9 +77,11 @@ function Shell({ session, shared, authError }: ShellProps) {
         </div>
 
         {session ? (
-          <span className="pill truncate" title={planLabel(plan)}>
-            {planLabel(plan)}
-          </span>
+          <SharedPlanPicker
+            activePlanId={session.planId}
+            activeName={planLabel(plan)}
+            canManage={session.role === 'owner'}
+          />
         ) : (
           <select
             style={{ width: 'auto', maxWidth: 220 }}
