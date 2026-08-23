@@ -4,6 +4,10 @@
   "compatibility_date": "2026-08-22",
   "main": "worker/index.ts",
 
+  // This login can reach several accounts; name the one that owns these
+  // resources so a deploy can never land in the wrong place.
+  "account_id": "9569781c361a80bd0b96dedbac0aca6d",
+
   // Publish on <name>.<subdomain>.workers.dev. Workers created through the
   // dashboard's Git-import flow can land with no route attached at all
   // ("No URLs enabled"), so state it here rather than relying on a default.
@@ -27,8 +31,7 @@
     {
       "binding": "DB",
       "database_name": "bmxc-playlist-sorter",
-      // Replace with the id printed by `wrangler d1 create`.
-      "database_id": "local-development-placeholder",
+      "database_id": "ea340ca4-6710-4cdb-ac8a-b7f6756b4a80",
       "migrations_dir": "migrations"
     }
   ],
@@ -54,7 +57,7 @@
     // Public by design: a Spotify Client ID is not a secret. The matching
     // SPOTIFY_CLIENT_SECRET and ENCRYPTION_KEY are set with
     // `wrangler secret put` and never appear in this file.
-    "SPOTIFY_CLIENT_ID": ""
+    "SPOTIFY_CLIENT_ID": "ea33a7d4234f499bb3d33d9797e8cc54"
   },
 
   "observability": {
