@@ -928,3 +928,53 @@ code.inline {
 @media (max-width: 820px) {
   .sync-status { max-width: 160px; }
 }
+
+/* ---------- 30-second previews ---------- */
+
+.preview-btn {
+  position: relative;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--panel);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 9px;
+  line-height: 1;
+}
+.preview-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.preview-btn.playing {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+/* A song with no findable preview stays visible but reads as unavailable. */
+.preview-btn.failed {
+  color: var(--text-faint);
+  border-color: var(--border);
+  cursor: default;
+}
+
+/* Progress around the button so the clip's 30s feels finite. */
+.preview-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  /* Punch out the middle so only a ring shows. */
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  pointer-events: none;
+}
+
+.preview-glyph { position: relative; }
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-ring { display: none; }
+}

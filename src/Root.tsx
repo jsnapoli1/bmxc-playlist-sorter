@@ -3,6 +3,7 @@ import App from './App.tsx'
 import JoinView from './components/JoinView.tsx'
 import { StoreProvider } from './lib/store.tsx'
 import { useSharedPlan } from './lib/useSharedPlan.ts'
+import { PreviewPlayerProvider } from './lib/usePreviewPlayer.tsx'
 import type { Role } from './lib/protocol.ts'
 
 export type SessionInfo = {
@@ -54,7 +55,9 @@ function Shell({ session }: { session: SessionInfo | null }) {
 
   return (
     <StoreProvider shared={session ? { plan: shared.plan, send: shared.send } : undefined}>
-      <App session={session} shared={shared} />
+      <PreviewPlayerProvider>
+        <App session={session} shared={shared} />
+      </PreviewPlayerProvider>
     </StoreProvider>
   )
 }

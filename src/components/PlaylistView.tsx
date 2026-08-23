@@ -11,6 +11,7 @@ import {
   type PlaylistRow,
 } from '../lib/playlistOrder.ts'
 import { isOrderDrag, readOrderDrag, setOrderDrag } from '../lib/dnd.ts'
+import PreviewButton from './PreviewButton.tsx'
 
 type Props = {
   onOpenImport: () => void
@@ -194,6 +195,7 @@ function PlaylistTrack({
         ⠿
       </span>
       <span className="pl-pos tiny faint">{position}</span>
+      <PreviewButton track={track} />
       {track.albumArt ? (
         <img className="art" src={track.albumArt} alt="" />
       ) : (

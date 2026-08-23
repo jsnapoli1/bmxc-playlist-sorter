@@ -3,6 +3,7 @@ import { useStore } from '../lib/store.tsx'
 import { CATEGORIES, categoryColor, type Block } from '../lib/types.ts'
 import { blockMinutes, formatDuration, formatMinutes, formatRange } from '../lib/time.ts'
 import { isPlannerDrag, readDrag, setEntryDrag } from '../lib/dnd.ts'
+import PreviewButton from './PreviewButton.tsx'
 import { createPlaylistWithTracks } from '../spotify/api.ts'
 import { useSpotify } from '../spotify/SpotifyProvider.tsx'
 
@@ -247,6 +248,8 @@ export default function BlockInspector({
             >
               <div className="entry-head">
                 <span className="faint mono tiny">{index + 1}</span>
+                {/* A song missing from the library has nothing to preview. */}
+                {track && <PreviewButton track={track} />}
                 {track?.albumArt ? (
                   <img className="art" src={track.albumArt} alt="" />
                 ) : (

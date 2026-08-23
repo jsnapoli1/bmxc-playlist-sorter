@@ -4,6 +4,7 @@ import type { Track } from '../lib/types.ts'
 import { formatDuration } from '../lib/time.ts'
 import { setTrackDrag } from '../lib/dnd.ts'
 import { UNSORTED } from '../lib/playlistOrder.ts'
+import PreviewButton from './PreviewButton.tsx'
 
 type Props = {
   /** Block that "+" adds to; null when nothing is selected. */
@@ -35,6 +36,7 @@ function TrackRow({
       onDragEnd={() => setDragging(false)}
       title={`${track.name} — ${track.artists}`}
     >
+      <PreviewButton track={track} />
       {track.albumArt ? (
         <img className="art" src={track.albumArt} alt="" />
       ) : (
