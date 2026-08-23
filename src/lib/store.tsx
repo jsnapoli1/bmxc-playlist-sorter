@@ -13,6 +13,7 @@ import { guessCategory } from './parseSchedule.ts'
 import { DEFAULT_SECTIONS, SECTION_COLORS } from './types.ts'
 import { assignSection, moveTracks, orderedTrackIds, UNSORTED } from './playlistOrder.ts'
 import { actionToOp } from './actionToOp.ts'
+import { migrateState } from './planMigration.ts'
 import type { Op } from './protocol.ts'
 
 const STORAGE_KEY = 'cps.state.v1'
@@ -54,6 +55,12 @@ export type Action =
   | { type: 'sortDayByTime'; dayId: string }
   | { type: 'addTracks'; tracks: Track[] }
   | { type: 'addSource'; source: SourcePlaylist }
+  /**
+   * Import a playlist as a new plan of its own, and switch to it. This is
+   * how a plan gets created: a plan is a playlist plus the sections and
+   * schedule built around it.
+   */
+  | { type: 'createPlanFromPlaylist'; source: SourcePlaylist; tracks: Track[] }
   | { type: 'removeSource'; id: string }
   // Master-playlist ordering. Each edit is expressed as a small operation
   // ("move these before that") rather than a whole new array, so the same
@@ -238,8 +245,22 @@ function reducer(state: AppState, action: Action): AppState {
     case 'addSource':
       return mapActive(state, (plan) => ({
         ...plan,
-        sources: [...plan.sources.filter((s) => s.id !== action.source.id), action.source],
+        // One playlist per plan: importing into a plan replaces whatever it
+        // was for rather than accumulating.
+        sources: [action.source],
       }))
+
+    case 'createPlanFromPlaylist': {
+      const tracks: Record<string, Track> = {}
+      for (const t of action.tracks) tracks[t.id] = t
+      const plan: Plan = {
+        ...emptyPlan(action.source.name),
+        tracks,
+        trackOrder: action.tracks.map((t) => t.id),
+        sources: [action.source],
+      }
+      return { plans: [...state.plans, plan], activePlanId: plan.id }
+    }
     case 'removeSource':
       return mapActive(state, (plan) => {
         const keep = Object.fromEntries(
@@ -410,10 +431,15 @@ function initialState(): AppState {
     if (raw) {
       const parsed = JSON.parse(raw) as AppState
       if (Array.isArray(parsed.plans) && parsed.plans.length) {
-        return {
-          plans: parsed.plans,
-          activePlanId: parsed.activePlanId ?? parsed.plans[0].id,
-        }
+        // Plans used to hold several playlists at once; split any that
+        // still do so each playlist gets its own sections and schedule.
+        return migrateState(
+          {
+            plans: parsed.plans,
+            activePlanId: parsed.activePlanId ?? parsed.plans[0].id,
+          },
+          uid,
+        )
       }
     }
   } catch {

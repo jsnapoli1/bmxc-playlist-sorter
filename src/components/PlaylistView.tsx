@@ -335,12 +335,14 @@ export default function PlaylistView({ onOpenImport }: Props) {
     return (
       <section className="playlist">
         <div className="empty-state" style={{ margin: 24 }}>
-          <p style={{ marginTop: 0 }}>No songs imported yet.</p>
+          <p style={{ marginTop: 0 }}>No playlist yet.</p>
           <p className="tiny faint">
-            Import a Spotify playlist, then arrange it here into sections.
+            Pick a Spotify playlist to sort. It gets its own sections and its own
+            schedule — import another later and it opens alongside this one, not on top
+            of it.
           </p>
           <button className="btn primary" onClick={onOpenImport}>
-            Import a Spotify playlist
+            Choose a Spotify playlist
           </button>
         </div>
       </section>

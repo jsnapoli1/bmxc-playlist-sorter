@@ -14,8 +14,12 @@ import SyncStatus from './components/SyncStatus.tsx'
 import DuckPal from './components/duckpal/DuckPal.tsx'
 import type { SessionInfo } from './Root.tsx'
 import type { SharedPlan } from './lib/useSharedPlan.ts'
+import { planLabel } from './lib/planMigration.ts'
 
 type Tab = 'plan' | 'playlist' | 'run' | 'settings'
+
+/** Sentinel value in the playlist picker; not a real plan id. */
+const NEW_PLAYLIST = '__new_playlist__'
 
 type ShellProps = {
   session: SessionInfo | null
@@ -70,21 +74,29 @@ function Shell({ session, shared }: ShellProps) {
         </div>
 
         {session ? (
-          <span className="pill truncate" title={plan.name}>
-            {plan.name}
+          <span className="pill truncate" title={planLabel(plan)}>
+            {planLabel(plan)}
           </span>
         ) : (
           <select
-            style={{ width: 'auto', maxWidth: 200 }}
+            style={{ width: 'auto', maxWidth: 220 }}
             value={plan.id}
-            onChange={(e) => dispatch({ type: 'setActivePlan', id: e.target.value })}
-            aria-label="Active plan"
+            onChange={(e) => {
+              // The sentinel opens the importer rather than switching, so
+              // "add a playlist" lives in the same control as choosing one.
+              if (e.target.value === NEW_PLAYLIST) setSongsModal(true)
+              else dispatch({ type: 'setActivePlan', id: e.target.value })
+            }}
+            aria-label="Playlist"
+            title="Each playlist has its own sections and schedule"
           >
             {state.plans.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name}
+                {planLabel(p)}
               </option>
             ))}
+            <option disabled>──────────</option>
+            <option value={NEW_PLAYLIST}>+ Import another playlist…</option>
           </select>
         )}
 

@@ -3,6 +3,7 @@ import { useStore } from '../lib/store.tsx'
 import { useSpotify } from '../spotify/SpotifyProvider.tsx'
 import SharePanel from './SharePanel.tsx'
 import type { SessionInfo } from '../Root.tsx'
+import { planLabel, sourceOf } from '../lib/planMigration.ts'
 import SpotifySetup from './SpotifySetup.tsx'
 import SpotifyDiagnostics from './SpotifyDiagnostics.tsx'
 import ScopeNotice from './ScopeNotice.tsx'
@@ -143,21 +144,27 @@ export default function SettingsView({ session }: { session: SessionInfo | null 
         )}
 
         <div className="card">
-          <h3>Weeks</h3>
+          <h3>Playlists</h3>
           <p className="tiny muted" style={{ marginTop: 4 }}>
-            Keep a separate plan per camp session, and duplicate one to start the next week from a
-            schedule you already like.
+            Each playlist has its own sections, song order and schedule. Switch between them
+            from the picker at the top; duplicate one to start next season from a week you
+            already like.
           </p>
           {state.plans.map((p) => (
             <div className="row" key={p.id} style={{ marginBottom: 6 }}>
               <input
                 type="text"
-                value={p.name}
+                value={planLabel(p)}
                 onChange={(e) => dispatch({ type: 'renamePlan', id: p.id, name: e.target.value })}
+                aria-label="Playlist name"
               />
-              <span className="pill">
-                {p.days.length}d · {p.blocks.reduce((n, b) => n + b.entries.length, 0)}♪
+              <span
+                className="pill"
+                title={`${Object.keys(p.tracks).length} songs · ${p.days.length} days · ${p.blocks.reduce((n, b) => n + b.entries.length, 0)} placed`}
+              >
+                {Object.keys(p.tracks).length}♪ · {p.days.length}d
               </span>
+              {!sourceOf(p) && <span className="tiny faint">no playlist yet</span>}
               {p.id !== state.activePlanId && (
                 <button className="btn sm" onClick={() => dispatch({ type: 'setActivePlan', id: p.id })}>
                   Open
@@ -170,7 +177,15 @@ export default function SettingsView({ session }: { session: SessionInfo | null 
                 className="btn sm danger"
                 disabled={state.plans.length === 1}
                 onClick={() => {
-                  if (confirm(`Delete the plan “${p.name}”? This cannot be undone.`)) {
+                  const placed = p.blocks.reduce((n, b) => n + b.entries.length, 0)
+                  if (
+                    confirm(
+                      `Delete “${planLabel(p)}”?\n\n` +
+                        `${Object.keys(p.tracks).length} songs, ${p.days.length} days and ` +
+                        `${placed} placed song${placed === 1 ? '' : 's'} go with it. ` +
+                        `This cannot be undone.`,
+                    )
+                  ) {
                     dispatch({ type: 'deletePlan', id: p.id })
                   }
                 }}

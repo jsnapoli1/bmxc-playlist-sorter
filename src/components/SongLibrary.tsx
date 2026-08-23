@@ -67,7 +67,6 @@ function TrackRow({
 export default function SongLibrary({ selectedBlockId, selectedBlockLabel, onOpenImport }: Props) {
   const { plan, dispatch } = useStore()
   const [query, setQuery] = useState('')
-  const [sourceFilter, setSourceFilter] = useState('all')
   const [sectionFilter, setSectionFilter] = useState('all')
   const [hideUsed, setHideUsed] = useState(false)
 
@@ -85,7 +84,6 @@ export default function SongLibrary({ selectedBlockId, selectedBlockLabel, onOpe
   const tracks = useMemo(() => {
     const q = query.trim().toLowerCase()
     return Object.values(plan.tracks)
-      .filter((t) => (sourceFilter === 'all' ? true : t.sourceId === sourceFilter))
       .filter((t) => {
         // Sections come from the master playlist view; filtering by one is
         // how you fill a waterfront block from the songs marked "Lake".
@@ -98,7 +96,7 @@ export default function SongLibrary({ selectedBlockId, selectedBlockLabel, onOpe
         !q ? true : `${t.name} ${t.artists} ${t.album}`.toLowerCase().includes(q),
       )
       .sort((a, b) => a.name.localeCompare(b.name))
-  }, [plan.tracks, query, sourceFilter, sectionFilter, hideUsed, usage])
+  }, [plan.tracks, query, sectionFilter, hideUsed, usage])
 
   const total = Object.keys(plan.tracks).length
   const unplaced = total - usage.size
@@ -118,16 +116,6 @@ export default function SongLibrary({ selectedBlockId, selectedBlockLabel, onOpe
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        {plan.sources.length > 1 && (
-          <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}>
-            <option value="all">All playlists ({total})</option>
-            {plan.sources.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        )}
         {(plan.sections ?? []).length > 0 && (
           <select
             value={sectionFilter}

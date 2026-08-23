@@ -77,6 +77,15 @@ export type Plan = {
   days: Day[]
   blocks: Block[]
   tracks: Record<string, Track>
+  /**
+   * The playlist this plan is for.
+   *
+   * A plan holds one playlist, along with the sections and schedule built
+   * around it — switching playlists means switching plans. Still an array
+   * because plans saved before that rule could hold several; `sourceOf()`
+   * reads the first, and `splitBySource()` migrates the rest into their own
+   * plans on load.
+   */
   sources: SourcePlaylist[]
   /**
    * Hand-arranged order of the master playlist, as track ids. Optional so

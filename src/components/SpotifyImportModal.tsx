@@ -3,6 +3,7 @@ import { useStore } from '../lib/store.tsx'
 import { useSpotify } from '../spotify/SpotifyProvider.tsx'
 import { getPlaylist, getPlaylistTracks, type SpotifyPlaylist } from '../spotify/api.ts'
 import SpotifySetup from './SpotifySetup.tsx'
+import { sourceOf } from '../lib/planMigration.ts'
 import ScopeNotice from './ScopeNotice.tsx'
 
 /** Accepts a playlist id, a spotify: URI, or an open.spotify.com link. */
@@ -19,6 +20,7 @@ export function parsePlaylistRef(input: string): string | null {
 
 export default function SpotifyImportModal({ onClose }: { onClose: () => void }) {
   const { plan, dispatch } = useStore()
+  const current = sourceOf(plan)
   const {
     status,
     user,
@@ -60,19 +62,34 @@ export default function SpotifyImportModal({ onClose }: { onClose: () => void })
         return
       }
 
-      dispatch({ type: 'addTracks', tracks })
-      dispatch({
-        type: 'addSource',
-        source: {
-          id: playlist.id,
-          name: playlist.name,
-          owner: playlist.owner,
-          image: playlist.image,
-          trackCount: tracks.length,
-          importedAt: Date.now(),
-        },
-      })
-      setDone(`Added ${tracks.length} songs from “${playlist.name}”.`)
+      const source = {
+        id: playlist.id,
+        name: playlist.name,
+        owner: playlist.owner,
+        image: playlist.image,
+        trackCount: tracks.length,
+        importedAt: Date.now(),
+      }
+
+      if (!current) {
+        // Nothing imported yet — fill this plan rather than leaving an
+        // empty one behind.
+        dispatch({ type: 'addTracks', tracks })
+        dispatch({ type: 'addSource', source })
+        dispatch({ type: 'renamePlan', id: plan.id, name: playlist.name })
+        setDone(`Imported ${tracks.length} songs from “${playlist.name}”.`)
+      } else if (playlist.id === current.id) {
+        // Re-importing the same playlist refreshes it in place, keeping
+        // every section and schedule placement.
+        dispatch({ type: 'addTracks', tracks })
+        dispatch({ type: 'addSource', source })
+        setDone(`Refreshed “${playlist.name}” — ${tracks.length} songs.`)
+      } else {
+        // A different playlist gets its own plan, with its own sections
+        // and schedule, and becomes the active one.
+        dispatch({ type: 'createPlanFromPlaylist', source, tracks })
+        setDone(`Opened “${playlist.name}” with ${tracks.length} songs.`)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -103,7 +120,7 @@ export default function SpotifyImportModal({ onClose }: { onClose: () => void })
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="row" style={{ marginBottom: 12 }}>
-          <h2 className="grow">Import songs from Spotify</h2>
+          <h2 className="grow">{current ? 'Choose a playlist' : 'Import songs from Spotify'}</h2>
           <button className="btn ghost" onClick={onClose}>
             ×
           </button>
@@ -133,21 +150,11 @@ export default function SpotifyImportModal({ onClose }: { onClose: () => void })
               </button>
             </div>
 
-            {plan.sources.length > 0 && (
-              <div className="row wrap tiny faint" style={{ marginBottom: 10 }}>
-                Already imported:
-                {plan.sources.map((s) => (
-                  <span className="pill" key={s.id}>
-                    {s.name} · {s.trackCount}
-                    <button
-                      className="btn ghost icon sm"
-                      title="Remove these songs from the library"
-                      onClick={() => dispatch({ type: 'removeSource', id: s.id })}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
+            {current && (
+              <div className="banner tiny" style={{ marginBottom: 10 }}>
+                This plan is for <strong>{current.name}</strong>. Picking a different
+                playlist opens it as its own plan, with its own sections and schedule —
+                this one stays exactly as you left it.
               </div>
             )}
 
