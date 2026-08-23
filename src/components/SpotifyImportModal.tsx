@@ -117,12 +117,18 @@ export default function SpotifyImportModal({
         await setSyncTarget()
         setDone(`Imported ${tracks.length} songs from “${playlist.name}”.`)
       } else if (playlist.id === current.id) {
-        // Re-importing the same playlist refreshes it in place, keeping
-        // every section and schedule placement.
-        dispatch({ type: 'addTracks', tracks })
+        // Re-importing the same playlist refreshes it in place: sections
+        // and schedule placements survive, and songs deleted in Spotify
+        // since the last import are dropped from the library.
+        const before = Object.values(plan.tracks).filter((t) => t.sourceId === playlist.id).length
+        dispatch({ type: 'syncTracks', tracks, sourceId: playlist.id })
         dispatch({ type: 'addSource', source })
         await setSyncTarget()
-        setDone(`Refreshed “${playlist.name}” — ${tracks.length} songs.`)
+        const removed = Math.max(0, before - tracks.length)
+        setDone(
+          `Refreshed “${playlist.name}” — ${tracks.length} songs` +
+            (removed ? `, ${removed} no longer in the playlist removed.` : '.'),
+        )
       } else if (isShared) {
         // On a shared account a plan lives on the server, so ask it to
         // make one for this playlist and switch to it. The reload picks

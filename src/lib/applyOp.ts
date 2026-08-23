@@ -87,6 +87,35 @@ export function applyOp(plan: Plan, op: Op): Plan {
       }
       return { ...plan, tracks, trackOrder: [...orderedTrackIds(plan), ...added] }
     }
+    case 'syncTracks': {
+      const incoming = op.tracks as Track[]
+      const present = new Set(incoming.map((t) => t.id))
+
+      // A song still placed on a block is kept even when it has left the
+      // Spotify playlist: silently emptying part of the schedule would be
+      // worse than a stale entry the run sheet can still name.
+      const placed = new Set<string>()
+      for (const block of plan.blocks) {
+        for (const entry of block.entries) placed.add(entry.trackId)
+      }
+
+      const tracks: Record<string, Track> = {}
+      for (const [id, track] of Object.entries(plan.tracks)) {
+        // Only songs from this playlist are subject to removal; anything
+        // imported from elsewhere is left alone.
+        const mine = track.sourceId === op.sourceId
+        if (!mine || present.has(id) || placed.has(id)) tracks[id] = track
+      }
+      for (const raw of incoming) {
+        // Keep the section a song was filed into across a refresh.
+        tracks[raw.id] = { ...tracks[raw.id], ...raw }
+      }
+
+      const order = orderedTrackIds(plan).filter((id) => tracks[id])
+      const added = incoming.map((t) => t.id).filter((id) => !order.includes(id))
+      return { ...plan, tracks, trackOrder: [...order, ...added] }
+    }
+
     case 'addSource': {
       const source = op.source as SourcePlaylist
       return {

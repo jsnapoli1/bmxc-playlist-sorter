@@ -273,3 +273,111 @@ test('order of independent edits by two people does not matter', () => {
   // Assert
   assert.deepEqual(a, b)
 })
+
+test('syncTracks drops a song deleted from the Spotify playlist', () => {
+  // Arrange — 'b' is gone from Spotify since the last import.
+  const start = plan({
+    tracks: { a: track('a', { sourceId: 's1' }), b: track('b', { sourceId: 's1' }) },
+    trackOrder: ['a', 'b'],
+  })
+
+  // Act
+  const next = applyOp(start, {
+    type: 'syncTracks',
+    tracks: [track('a', { sourceId: 's1' })],
+    sourceId: 's1',
+  })
+
+  // Assert
+  assert.deepEqual(Object.keys(next.tracks), ['a'])
+  assert.deepEqual(orderedTrackIds(next), ['a'])
+})
+
+test('syncTracks keeps a removed song that is still on the schedule', () => {
+  // Arrange — dropping it would silently empty part of the week.
+  const start = plan({
+    tracks: { a: track('a', { sourceId: 's1' }), b: track('b', { sourceId: 's1' }) },
+    trackOrder: ['a', 'b'],
+    blocks: [
+      { id: 'blk', dayId: 'd', title: '', start: '', end: '', location: '',
+        category: 'Other', notes: '', entries: [{ id: 'e1', trackId: 'b', note: 'fade' }] },
+    ],
+  })
+
+  // Act
+  const next = applyOp(start, {
+    type: 'syncTracks',
+    tracks: [track('a', { sourceId: 's1' })],
+    sourceId: 's1',
+  })
+
+  // Assert
+  assert.ok(next.tracks.b, 'a placed song must survive a refresh')
+})
+
+test('syncTracks leaves songs from another playlist alone', () => {
+  // Arrange
+  const start = plan({
+    tracks: { a: track('a', { sourceId: 's1' }), z: track('z', { sourceId: 's2' }) },
+    trackOrder: ['a', 'z'],
+  })
+
+  // Act
+  const next = applyOp(start, { type: 'syncTracks', tracks: [], sourceId: 's1' })
+
+  // Assert
+  assert.ok(next.tracks.z)
+  assert.equal(next.tracks.a, undefined)
+})
+
+test('syncTracks keeps the section a song was filed into', () => {
+  // Arrange — a refresh must not undo sorting work.
+  const start = plan({
+    tracks: { a: track('a', { sourceId: 's1', sectionId: 'sec_lake' }) },
+    trackOrder: ['a'],
+  })
+
+  // Act — Spotify returns the song with no section, as it always does.
+  const next = applyOp(start, {
+    type: 'syncTracks',
+    tracks: [track('a', { sourceId: 's1' })],
+    sourceId: 's1',
+  })
+
+  // Assert
+  assert.equal(next.tracks.a.sectionId, 'sec_lake')
+})
+
+test('syncTracks preserves hand-arranged order and appends new songs', () => {
+  // Arrange
+  const start = plan({
+    tracks: { a: track('a', { sourceId: 's1' }), b: track('b', { sourceId: 's1' }) },
+    trackOrder: ['b', 'a'],
+  })
+
+  // Act — 'c' is new in Spotify.
+  const next = applyOp(start, {
+    type: 'syncTracks',
+    tracks: [track('a', { sourceId: 's1' }), track('b', { sourceId: 's1' }), track('c', { sourceId: 's1' })],
+    sourceId: 's1',
+  })
+
+  // Assert
+  assert.deepEqual(orderedTrackIds(next), ['b', 'a', 'c'])
+})
+
+test('syncTracks applied twice is stable', () => {
+  // Arrange
+  const start = plan({
+    tracks: { a: track('a', { sourceId: 's1' }), b: track('b', { sourceId: 's1' }) },
+    trackOrder: ['a', 'b'],
+  })
+  const op: Op = { type: 'syncTracks', tracks: [track('a', { sourceId: 's1' })], sourceId: 's1' }
+
+  // Act
+  const once = applyOp(start, op)
+  const twice = applyOp(once, op)
+
+  // Assert
+  assert.deepEqual(twice, once)
+})

@@ -49,6 +49,8 @@ export function actionToOp(action: Action, uid: IdMaker): Op | null {
 
     case 'addTracks':
       return { type: 'addTracks', tracks: action.tracks }
+    case 'syncTracks':
+      return { type: 'syncTracks', tracks: action.tracks, sourceId: action.sourceId }
     case 'addSource':
       return { type: 'addSource', source: action.source }
     case 'removeSource':

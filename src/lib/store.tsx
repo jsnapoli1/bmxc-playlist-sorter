@@ -13,6 +13,7 @@ import { guessCategory } from './parseSchedule.ts'
 import { DEFAULT_SECTIONS, SECTION_COLORS } from './types.ts'
 import { assignSection, moveTracks, orderedTrackIds, UNSORTED } from './playlistOrder.ts'
 import { actionToOp } from './actionToOp.ts'
+import { applyOp } from './applyOp.ts'
 import { migrateState } from './planMigration.ts'
 import type { Op } from './protocol.ts'
 
@@ -54,6 +55,7 @@ export type Action =
   | { type: 'moveBlockToDay'; id: string; dayId: string }
   | { type: 'sortDayByTime'; dayId: string }
   | { type: 'addTracks'; tracks: Track[] }
+  | { type: 'syncTracks'; tracks: Track[]; sourceId: string }
   | { type: 'addSource'; source: SourcePlaylist }
   /**
    * Import a playlist as a new plan of its own, and switch to it. This is
@@ -242,6 +244,11 @@ function reducer(state: AppState, action: Action): AppState {
           trackOrder: [...orderedTrackIds(plan), ...added],
         }
       })
+    case 'syncTracks':
+      return mapActive(state, (plan) =>
+        applyOp(plan, { type: 'syncTracks', tracks: action.tracks, sourceId: action.sourceId }),
+      )
+
     case 'addSource':
       return mapActive(state, (plan) => ({
         ...plan,

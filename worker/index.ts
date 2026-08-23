@@ -387,9 +387,18 @@ async function setPlaylist(request: Request, env: Env, session: Session): Promis
       }
     } catch (err) {
       const e = err as SpotifyError
-      return fail(e.message, e.status === 404 ? 404 : 400)
+      console.log(
+        `setPlaylist rejected: plan=${session.planId} playlist=${playlistId} ` +
+          `status=${e.status ?? '?'} message=${e.message}`,
+      )
+      return fail(
+        `Could not turn on Spotify sync for that playlist: ${e.message}`,
+        e.status === 404 ? 404 : 400,
+      )
     }
   }
+
+  console.log(`setPlaylist ok: plan=${session.planId} playlist=${playlistId}`)
 
   await env.DB.prepare('UPDATE plans SET spotify_playlist_id = ?, updated_at = ? WHERE id = ?')
     .bind(playlistId, Date.now(), session.planId)

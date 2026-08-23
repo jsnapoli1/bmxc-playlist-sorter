@@ -27,6 +27,13 @@ export type Op =
   | { type: 'deleteSection'; id: string }
   | { type: 'moveSection'; id: string; delta: number }
   | { type: 'addTracks'; tracks: unknown[] }
+  /**
+   * Reconcile the library against a fresh read of the Spotify playlist:
+   * add what is new, update what changed, and drop what is no longer
+   * there. Unlike `addTracks` this can remove, which is what makes a
+   * re-import reflect a song deleted in Spotify.
+   */
+  | { type: 'syncTracks'; tracks: unknown[]; sourceId: string }
   | { type: 'addSource'; source: unknown }
   | { type: 'removeSource'; id: string }
   | { type: 'importSchedule'; parsed: unknown; mode: 'replace' | 'append' }
