@@ -2,6 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "bmxc-playlist-sorter",
   "compatibility_date": "2026-08-22",
+  "main": "worker/index.ts",
 
   // Publish on <name>.<subdomain>.workers.dev. Workers created through the
   // dashboard's Git-import flow can land with no route attached at all
@@ -13,13 +14,47 @@
   // redirect URI — so keep exactly one URL to register.
   "preview_urls": false,
 
-  // Assets-only Worker: Cloudflare serves the built files straight from its
-  // edge, with no Worker invocation per request (and so no request billing).
-  // The app is a client-side SPA with no backend, so there is no `main` script.
+  // The SPA is served from the edge; the Worker only runs for /api/*.
+  // `run_worker_first` is not set, so asset requests never invoke it.
   "assets": {
     "directory": "./dist",
-    // Deep links like /?code=... still resolve to index.html.
+    "binding": "ASSETS",
+    // Deep links like /join/<token> still resolve to index.html.
     "not_found_handling": "single-page-application"
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "bmxc-playlist-sorter",
+      // Replace with the id printed by `wrangler d1 create`.
+      "database_id": "local-development-placeholder",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PLAN_ROOM",
+        "class_name": "PlanRoom"
+      }
+    ]
+  },
+
+  "migrations": [
+    {
+      "tag": "v1",
+      // SQLite-backed DOs are the current default and the cheaper tier.
+      "new_sqlite_classes": ["PlanRoom"]
+    }
+  ],
+
+  "vars": {
+    // Public by design: a Spotify Client ID is not a secret. The matching
+    // SPOTIFY_CLIENT_SECRET and ENCRYPTION_KEY are set with
+    // `wrangler secret put` and never appear in this file.
+    "SPOTIFY_CLIENT_ID": ""
   },
 
   "observability": {

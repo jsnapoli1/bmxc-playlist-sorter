@@ -1,0 +1,31 @@
+{
+  // The Worker shares src/lib with the browser but has different globals —
+  // no DOM, plus the Workers runtime types.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["@cloudflare/workers-types"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true
+  },
+  // Only the modules the Worker actually shares. The rest of src/lib is
+  // browser-only (DOM drag events, localStorage, JSX) and would not compile
+  // against the Workers lib.
+  "include": [
+    "worker",
+    "src/lib/types.ts",
+    "src/lib/protocol.ts",
+    "src/lib/applyOp.ts",
+    "src/lib/playlistOrder.ts",
+    "src/lib/spotifyDiff.ts"
+  ]
+}

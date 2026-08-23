@@ -10,10 +10,18 @@ import ImportScheduleModal from './components/ImportScheduleModal.tsx'
 import SpotifyImportModal from './components/SpotifyImportModal.tsx'
 import RunOfShow from './components/RunOfShow.tsx'
 import SettingsView from './components/SettingsView.tsx'
+import SyncStatus from './components/SyncStatus.tsx'
+import type { SessionInfo } from './Root.tsx'
+import type { SharedPlan } from './lib/useSharedPlan.ts'
 
 type Tab = 'plan' | 'playlist' | 'run' | 'settings'
 
-function Shell() {
+type ShellProps = {
+  session: SessionInfo | null
+  shared: SharedPlan
+}
+
+function Shell({ session, shared }: ShellProps) {
   const { state, plan, dispatch } = useStore()
   const { status, user, connect, hasBuiltInClientId } = useSpotify()
   const [tab, setTab] = useState<Tab>('plan')
@@ -60,18 +68,24 @@ function Shell() {
           <span className="brand-text">Camp Playlist Sorter</span>
         </div>
 
-        <select
-          style={{ width: 'auto', maxWidth: 200 }}
-          value={plan.id}
-          onChange={(e) => dispatch({ type: 'setActivePlan', id: e.target.value })}
-          aria-label="Active plan"
-        >
-          {state.plans.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+        {session ? (
+          <span className="pill truncate" title={plan.name}>
+            {plan.name}
+          </span>
+        ) : (
+          <select
+            style={{ width: 'auto', maxWidth: 200 }}
+            value={plan.id}
+            onChange={(e) => dispatch({ type: 'setActivePlan', id: e.target.value })}
+            aria-label="Active plan"
+          >
+            {state.plans.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
 
         <nav className="tabs" role="tablist">
           {(
@@ -112,6 +126,17 @@ function Shell() {
           </>
         )}
 
+        {session && (
+          <SyncStatus
+            connection={shared.connection}
+            sync={shared.sync}
+            peers={shared.peers}
+            pending={shared.pending}
+            you={shared.you}
+          />
+        )}
+
+        {!session && (
         <button
           className="btn sm"
           onClick={() => {
@@ -130,6 +155,7 @@ function Shell() {
           />
           {status === 'connected' ? (user?.displayName ?? 'Spotify') : isMobile ? 'Spotify' : 'Connect Spotify'}
         </button>
+        )}
       </header>
 
       {tab === 'plan' && (
@@ -219,7 +245,7 @@ function Shell() {
 
       {tab === 'settings' && (
         <div className="workspace">
-          <SettingsView />
+          <SettingsView session={session} />
         </div>
       )}
 
@@ -229,10 +255,10 @@ function Shell() {
   )
 }
 
-export default function App() {
+export default function App({ session, shared }: ShellProps) {
   return (
     <SpotifyProvider>
-      <Shell />
+      <Shell session={session} shared={shared} />
     </SpotifyProvider>
   )
 }

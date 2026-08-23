@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react'
 import { useStore } from '../lib/store.tsx'
 import { useSpotify } from '../spotify/SpotifyProvider.tsx'
+import SharePanel from './SharePanel.tsx'
+import type { SessionInfo } from '../Root.tsx'
 import SpotifySetup from './SpotifySetup.tsx'
 import SpotifyDiagnostics from './SpotifyDiagnostics.tsx'
 import ScopeNotice from './ScopeNotice.tsx'
@@ -8,7 +10,7 @@ import { createPlaylistWithTracks } from '../spotify/api.ts'
 import { minutesOf } from '../lib/time.ts'
 import { loadToken } from '../spotify/auth.ts'
 
-export default function SettingsView() {
+export default function SettingsView({ session }: { session: SessionInfo | null }) {
   const { state, plan, dispatch, exportJson, importJson } = useStore()
   const { status, user, disconnect, redirectUri, error: connectionError, profileNote } = useSpotify()
   // A rejected account still has a token; without this the panel below would
@@ -73,6 +75,23 @@ export default function SettingsView() {
       <div className="page-inner">
         {message && <div className={`banner ${message.kind === 'ok' ? 'ok' : 'error'}`}>{message.text}</div>}
 
+        {session && <SharePanel session={session} />}
+
+        {!session && (
+          <div className="card">
+            <h3>Share this plan</h3>
+            <p className="tiny faint">
+              Sign in with the camp's Spotify account to put this plan online. Everyone else
+              gets an invite link and edits alongside you — no Spotify account needed on
+              their side. Your plan stays in this browser until you do.
+            </p>
+            <a className="btn primary" href="/api/auth/login">
+              Sign in with Spotify to share
+            </a>
+          </div>
+        )}
+
+        {!session && (
         <div className="card">
           <h3>Spotify</h3>
           {status === 'connected' ? (
@@ -121,6 +140,7 @@ export default function SettingsView() {
             <SpotifySetup />
           )}
         </div>
+        )}
 
         <div className="card">
           <h3>Weeks</h3>

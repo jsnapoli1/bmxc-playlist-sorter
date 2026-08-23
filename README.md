@@ -25,9 +25,20 @@ then print or pull up the run sheet during the week.
 - **Push back to Spotify** — turn any block, or every day, into a real Spotify playlist.
 - **Multiple weeks** — one plan per camp session; duplicate one to start the next.
 
-Everything is stored in your browser. Nothing is sent anywhere except Spotify, and
-there is no server to run or account to make. Export a JSON backup to move between
-computers or hand the plan off to next year's music person.
+- **Sort the master playlist** — arrange the whole imported playlist by hand in the
+  Playlist tab, grouped into sections you name (Run, Lake, Vibes, Feels). Filter the
+  song library by section while filling a block. The master order and the calendar
+  are independent: neither disturbs the other.
+- **Work together** — optionally put a plan online and hand out an invite link.
+  Collaborators edit alongside you in real time and need no Spotify account.
+
+By default everything is stored in your browser: nothing is sent anywhere except
+Spotify, and there is no server to run or account to make. Export a JSON backup to
+move between computers or hand the plan off to next year's music person.
+
+If you turn on **shared plans**, the plan moves to a Cloudflare Worker so several
+people can edit it from any device, and the master playlist order syncs back to
+Spotify automatically. See [docs/deploying-shared-plans.md](docs/deploying-shared-plans.md).
 
 ## Getting started
 

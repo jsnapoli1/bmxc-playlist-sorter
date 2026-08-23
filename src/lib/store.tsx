@@ -12,6 +12,8 @@ import type { ParsedSchedule } from './parseSchedule.ts'
 import { guessCategory } from './parseSchedule.ts'
 import { DEFAULT_SECTIONS, SECTION_COLORS } from './types.ts'
 import { assignSection, moveTracks, orderedTrackIds, UNSORTED } from './playlistOrder.ts'
+import { actionToOp } from './actionToOp.ts'
+import type { Op } from './protocol.ts'
 
 const STORAGE_KEY = 'cps.state.v1'
 
@@ -34,7 +36,7 @@ export function emptyPlan(name = 'Camp Week 1'): Plan {
   }
 }
 
-type Action =
+export type Action =
   | { type: 'createPlan'; name: string }
   | { type: 'deletePlan'; id: string }
   | { type: 'renamePlan'; id: string; name: string }
@@ -432,7 +434,19 @@ type StoreValue = {
 
 const StoreContext = createContext<StoreValue | null>(null)
 
-export function StoreProvider({ children }: { children: ReactNode }) {
+type ProviderProps = {
+  children: ReactNode
+  /**
+   * When set, this plan is shared: edits are sent as ops instead of being
+   * applied only locally, and `sharedPlan` is the server's copy.
+   */
+  shared?: {
+    plan: Plan | null
+    send: (ops: Op[]) => void
+  }
+}
+
+export function StoreProvider({ children, shared }: ProviderProps) {
   const [state, dispatch] = useReducer(reducer, undefined, initialState)
 
   useEffect(() => {
@@ -446,9 +460,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(id)
   }, [state])
 
-  const plan = useMemo(
+  const localPlan = useMemo(
     () => state.plans.find((p) => p.id === state.activePlanId) ?? state.plans[0] ?? emptyPlan(),
     [state],
+  )
+
+  // A shared plan's authoritative copy is the server's; a local one is the
+  // browser's. Everything downstream just reads `plan`.
+  const plan = shared?.plan ?? localPlan
+
+  /**
+   * Edits go to the server when the plan is shared, and to the local
+   * reducer otherwise. Actions that manage the browser's own list of plans
+   * (create, duplicate, switch) always stay local.
+   */
+  const routedDispatch = useCallback(
+    (action: Action) => {
+      if (!shared) {
+        dispatch(action)
+        return
+      }
+      const op = actionToOp(action, uid)
+      if (op) shared.send([op])
+      else dispatch(action)
+    },
+    [shared],
   )
 
   const blocksForDay = useCallback(
@@ -476,8 +512,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo<StoreValue>(
-    () => ({ state, plan, dispatch, blocksForDay, exportJson, importJson }),
-    [state, plan, blocksForDay, exportJson, importJson],
+    () => ({ state, plan, dispatch: routedDispatch, blocksForDay, exportJson, importJson }),
+    [state, plan, routedDispatch, blocksForDay, exportJson, importJson],
   )
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
