@@ -11,6 +11,7 @@ import {
   type PlaylistRow,
 } from '../lib/playlistOrder.ts'
 import { isOrderDrag, readOrderDrag, setOrderDrag } from '../lib/dnd.ts'
+import { useDragScroll } from '../lib/useDragScroll.ts'
 import PreviewButton from './PreviewButton.tsx'
 
 type Props = {
@@ -233,6 +234,7 @@ export default function PlaylistView({ onOpenImport }: Props) {
   }, [])
   // Anchor for shift-click ranges.
   const lastClicked = useRef<string | null>(null)
+  const dragScroll = useDragScroll()
 
   const rows = useMemo(() => playlistRows(plan), [plan])
   const sections = plan.sections ?? []
@@ -288,7 +290,8 @@ export default function PlaylistView({ onOpenImport }: Props) {
   const endDrag = useCallback(() => {
     setDragging(new Set())
     setTarget(null)
-  }, [setTarget])
+    dragScroll.stop()
+  }, [setTarget, dragScroll])
 
   const drop = useCallback(
     (e: React.DragEvent) => {
@@ -387,7 +390,17 @@ export default function PlaylistView({ onOpenImport }: Props) {
         </div>
       </div>
 
-      <div className="scroll pl-scroll">
+      <div
+        className="scroll pl-scroll"
+        ref={dragScroll.ref}
+        onDragOver={(e) => {
+          if (!isOrderDrag(e)) return
+          e.preventDefault()
+          dragScroll.update(e.clientY)
+        }}
+        onDragLeave={dragScroll.stop}
+        onDrop={dragScroll.stop}
+      >
         {rows.map((row) => {
           if (row.kind === 'header') {
             const id = row.section?.id ?? UNSORTED
