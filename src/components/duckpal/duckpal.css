@@ -1,0 +1,301 @@
+/* DuckPal - the two-duck companion in the bottom-right corner.
+   All motion is transform/opacity only so it stays on the compositor. */
+
+.dp-root {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 40;
+}
+
+.dp-card {
+  width: 216px;
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.dp-stage {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 116px;
+  padding: 0;
+  background: var(--bg-raised);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.dp-stage:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.dp-body { padding: 8px 10px 10px; }
+
+.dp-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dp-name {
+  font-weight: 650;
+  font-size: 12.5px;
+}
+
+.dp-mood {
+  color: var(--text-faint);
+  font-size: 11px;
+  margin-bottom: 7px;
+}
+
+.dp-meter {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+.dp-meter-label { width: 40px; }
+
+.dp-track {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.dp-fill {
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.dp-collapse {
+  background: none;
+  border: 0;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  font-size: 15px;
+}
+.dp-collapse:hover { color: var(--text); }
+
+/* Collapsed: a small tab that keeps the pair one click away. */
+.dp-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  border-radius: 999px;
+  padding: 5px 11px;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  font-size: 12px;
+}
+.dp-tab:hover { background: var(--panel-hover); color: var(--text); }
+
+/* ------------------------------------------------------------ the scene */
+
+.dp-scene {
+  position: relative;
+  width: 180px;
+  height: 104px;
+}
+
+.dp-duck {
+  position: absolute;
+  bottom: 10px;
+  transform-origin: 50% 100%;
+}
+.dp-duck-l { left: 12px; }
+.dp-duck-r { right: 12px; }
+
+/* Default pose is back-to-back: heads point outward, tails face each other. */
+.dp-duck-l svg { transform: scaleX(-1); }
+
+.dp-shadow {
+  position: absolute;
+  bottom: 7px;
+  left: 50%;
+  width: 126px;
+  height: 9px;
+  margin-left: -63px;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.45), transparent 70%);
+}
+
+/* ---- happy: the rub ----------------------------------------------------
+   Contact is made once at 30% and held to 78%: X stays pinned (a 1px press-in
+   wobble only) while Y slides in opposite directions on each duck, so the
+   tails grind against each other instead of tapping. Travel is 10px, tuned by
+   measuring the painted gap - rotation swings the tail inward on top of the
+   translation, so a naive gap/2 overlaps the bodies. */
+.dp-happy .dp-duck-l { animation: dp-rub-l 3s ease-in-out infinite; }
+.dp-happy .dp-duck-r { animation: dp-rub-r 3s ease-in-out infinite; }
+
+@keyframes dp-rub-l {
+  0%, 16%   { transform: translateX(0) translateY(0) rotate(0deg); }
+  30%       { transform: translateX(10px) translateY(0) rotate(-3deg); }
+  38%       { transform: translateX(11px) translateY(-4px) rotate(-7deg); }
+  46%       { transform: translateX(10px) translateY(3px) rotate(1deg); }
+  54%       { transform: translateX(11px) translateY(-4px) rotate(-7deg); }
+  62%       { transform: translateX(10px) translateY(3px) rotate(1deg); }
+  70%       { transform: translateX(11px) translateY(-2px) rotate(-4deg); }
+  78%       { transform: translateX(10px) translateY(0) rotate(-2deg); }
+  92%, 100% { transform: translateX(0) translateY(0) rotate(0deg); }
+}
+
+@keyframes dp-rub-r {
+  0%, 16%   { transform: translateX(0) translateY(0) rotate(0deg); }
+  30%       { transform: translateX(-10px) translateY(0) rotate(3deg); }
+  38%       { transform: translateX(-11px) translateY(3px) rotate(7deg); }
+  46%       { transform: translateX(-10px) translateY(-4px) rotate(-1deg); }
+  54%       { transform: translateX(-11px) translateY(3px) rotate(7deg); }
+  62%       { transform: translateX(-10px) translateY(-4px) rotate(-1deg); }
+  70%       { transform: translateX(-11px) translateY(2px) rotate(4deg); }
+  78%       { transform: translateX(-10px) translateY(0) rotate(2deg); }
+  92%, 100% { transform: translateX(0) translateY(0) rotate(0deg); }
+}
+
+.dp-puff {
+  position: absolute;
+  bottom: 44px;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50% 50% 50% 0;
+  background: var(--text-faint);
+  opacity: 0;
+}
+.dp-puff:nth-of-type(1) { --dp-dx: -22px; }
+.dp-puff:nth-of-type(2) { --dp-dx: 4px; }
+.dp-puff:nth-of-type(3) { --dp-dx: 20px; }
+
+/* Staggered across the rub so feathers keep shedding, rather than one burst. */
+.dp-happy .dp-puff { animation: dp-puff 3s ease-out infinite; }
+.dp-happy .dp-puff:nth-of-type(2) { animation-delay: 0.34s; }
+.dp-happy .dp-puff:nth-of-type(3) { animation-delay: 0.68s; }
+
+@keyframes dp-puff {
+  0%, 32%   { opacity: 0; transform: translate(0, 0) scale(0.4) rotate(0deg); }
+  40%       { opacity: 0.9; transform: translate(calc(var(--dp-dx) * 0.3), -8px) scale(1) rotate(40deg); }
+  78%, 100% { opacity: 0; transform: translate(var(--dp-dx), -34px) scale(0.7) rotate(150deg); }
+}
+
+.dp-heart {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  margin-left: -6px;
+  font-size: 13px;
+  color: var(--accent);
+  opacity: 0;
+}
+.dp-happy .dp-heart { animation: dp-heart 3s ease-out infinite; }
+
+@keyframes dp-heart {
+  0%, 46%   { opacity: 0; transform: translateY(6px) scale(0.5); }
+  60%       { opacity: 1; transform: translateY(0) scale(1); }
+  92%, 100% { opacity: 0; transform: translateY(-16px) scale(0.9); }
+}
+
+/* ---- content: turned toward each other, gentle offset bobbing ---------- */
+.dp-content .dp-duck-l svg { transform: scaleX(1); }
+.dp-content .dp-duck-r svg { transform: scaleX(-1); }
+.dp-content .dp-duck-l { animation: dp-bob 2.6s ease-in-out infinite; }
+.dp-content .dp-duck-r { animation: dp-bob 2.6s ease-in-out infinite 0.5s; }
+
+@keyframes dp-bob {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-5px) rotate(2deg); }
+}
+
+/* ---- sleepy: eyes shut, slow breathing, zzz ---------------------------- */
+.dp-sleepy .dp-duck-l { animation: dp-breathe 4s ease-in-out infinite; }
+.dp-sleepy .dp-duck-r { animation: dp-breathe 4s ease-in-out infinite 0.8s; }
+
+@keyframes dp-breathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(2px) scale(1.03, 0.97); }
+}
+
+.dp-zzz {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  font-size: 12px;
+  color: var(--text-faint);
+  opacity: 0;
+}
+.dp-sleepy .dp-zzz { animation: dp-zzz 3.4s ease-out infinite; }
+.dp-sleepy .dp-zzz:nth-of-type(2) { animation-delay: 1.1s; }
+.dp-sleepy .dp-zzz:nth-of-type(3) { animation-delay: 2.2s; }
+
+@keyframes dp-zzz {
+  0%   { opacity: 0; transform: translate(0, 0) scale(0.6); }
+  25%  { opacity: 0.85; transform: translate(6px, -10px) scale(1); }
+  100% { opacity: 0; transform: translate(18px, -30px) scale(1.1); }
+}
+
+.dp-eyelid { display: none; }
+.dp-sleepy .dp-eyelid { display: block; }
+.dp-sleepy .dp-pupil { display: none; }
+
+/* ---- lonely: shuffled apart, drooping. Facing is already outward. ------ */
+.dp-lonely .dp-duck-l { animation: dp-droop-l 5s ease-in-out infinite; }
+.dp-lonely .dp-duck-r { animation: dp-droop-r 5s ease-in-out infinite; }
+
+@keyframes dp-droop-l {
+  0%, 100% { transform: translateX(-10px) rotate(-2deg); }
+  50%      { transform: translateX(-12px) rotate(-4deg); }
+}
+@keyframes dp-droop-r {
+  0%, 100% { transform: translateX(10px) rotate(2deg); }
+  50%      { transform: translateX(12px) rotate(4deg); }
+}
+
+/* ---- boop: the click reaction. Overrides whatever the mood was doing. -- */
+.dp-booping .dp-duck-l,
+.dp-booping .dp-duck-r {
+  animation: dp-boop 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dp-boop {
+  0%   { transform: translateY(0) scale(1); }
+  35%  { transform: translateY(-14px) scale(1.1, 0.9); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dp-scene *,
+  .dp-scene {
+    animation: none !important;
+  }
+  /* Without motion the transient sprites would sit frozen on screen. */
+  .dp-puff,
+  .dp-heart,
+  .dp-zzz {
+    display: none;
+  }
+  .dp-fill { transition: none; }
+}
+
+@media (max-width: 720px) {
+  /* The phone layout already gives the schedule the whole screen; keep the
+     companion out of the way by leaving only the collapsed tab. */
+  .dp-root { right: 10px; bottom: 10px; }
+  .dp-card { width: 180px; }
+  .dp-stage { height: 96px; }
+}

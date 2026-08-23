@@ -11,6 +11,7 @@ import SpotifyImportModal from './components/SpotifyImportModal.tsx'
 import RunOfShow from './components/RunOfShow.tsx'
 import SettingsView from './components/SettingsView.tsx'
 import SyncStatus from './components/SyncStatus.tsx'
+import DuckPal from './components/duckpal/DuckPal.tsx'
 import type { SessionInfo } from './Root.tsx'
 import type { SharedPlan } from './lib/useSharedPlan.ts'
 
@@ -248,6 +249,8 @@ function Shell({ session, shared }: ShellProps) {
           <SettingsView session={session} />
         </div>
       )}
+
+      <DuckPal placed={placed} />
 
       {scheduleModal && <ImportScheduleModal onClose={() => setScheduleModal(false)} />}
       {songsModal && <SpotifyImportModal onClose={() => setSongsModal(false)} />}
