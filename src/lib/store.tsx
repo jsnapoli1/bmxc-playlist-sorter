@@ -7,9 +7,11 @@ import {
   useReducer,
   type ReactNode,
 } from 'react'
-import type { AppState, Block, Day, Plan, SourcePlaylist, Track } from './types.ts'
+import type { AppState, Block, Day, Plan, Section, SourcePlaylist, Track } from './types.ts'
 import type { ParsedSchedule } from './parseSchedule.ts'
 import { guessCategory } from './parseSchedule.ts'
+import { DEFAULT_SECTIONS, SECTION_COLORS } from './types.ts'
+import { assignSection, moveTracks, orderedTrackIds, UNSORTED } from './playlistOrder.ts'
 
 const STORAGE_KEY = 'cps.state.v1'
 
@@ -26,6 +28,8 @@ export function emptyPlan(name = 'Camp Week 1'): Plan {
     blocks: [],
     tracks: {},
     sources: [],
+    trackOrder: [],
+    sections: DEFAULT_SECTIONS.map((s) => ({ ...s, id: uid('sec') })),
     updatedAt: Date.now(),
   }
 }
@@ -49,6 +53,16 @@ type Action =
   | { type: 'addTracks'; tracks: Track[] }
   | { type: 'addSource'; source: SourcePlaylist }
   | { type: 'removeSource'; id: string }
+  // Master-playlist ordering. Each edit is expressed as a small operation
+  // ("move these before that") rather than a whole new array, so the same
+  // actions can later replay onto a shared plan without clobbering a
+  // collaborator's concurrent edit.
+  | { type: 'moveTracks'; trackIds: string[]; beforeId: string | null; sectionId?: string }
+  | { type: 'setTrackSection'; trackIds: string[]; sectionId: string }
+  | { type: 'addSection'; name: string; color?: string }
+  | { type: 'updateSection'; id: string; patch: Partial<Omit<Section, 'id'>> }
+  | { type: 'deleteSection'; id: string }
+  | { type: 'moveSection'; id: string; delta: number }
   | { type: 'assign'; blockId: string; trackIds: string[]; index?: number }
   | { type: 'unassign'; blockId: string; entryId: string }
   | { type: 'moveEntry'; fromBlockId: string; entryId: string; toBlockId: string; toIndex: number }
@@ -206,8 +220,18 @@ function reducer(state: AppState, action: Action): AppState {
     case 'addTracks':
       return mapActive(state, (plan) => {
         const tracks = { ...plan.tracks }
-        for (const t of action.tracks) tracks[t.id] = { ...tracks[t.id], ...t }
-        return { ...plan, tracks }
+        // Re-importing a song must not move it: it keeps its place in the
+        // order and whatever section it was filed into.
+        const added: string[] = []
+        for (const t of action.tracks) {
+          if (!tracks[t.id]) added.push(t.id)
+          tracks[t.id] = { ...tracks[t.id], ...t }
+        }
+        return {
+          ...plan,
+          tracks,
+          trackOrder: [...orderedTrackIds(plan), ...added],
+        }
       })
     case 'addSource':
       return mapActive(state, (plan) => ({
@@ -230,7 +254,78 @@ function reducer(state: AppState, action: Action): AppState {
           ...plan,
           sources: plan.sources.filter((s) => s.id !== action.id),
           tracks: keep,
+          // Drop removed songs from the order rather than leaving ids that
+          // resolve to nothing.
+          trackOrder: orderedTrackIds(plan).filter((id) => keep[id]),
         }
+      })
+
+    case 'moveTracks':
+      return mapActive(state, (plan) => {
+        const next: Plan = {
+          ...plan,
+          trackOrder: moveTracks(orderedTrackIds(plan), action.trackIds, action.beforeId),
+        }
+        // A drop lands in whichever section it was released over, so the
+        // move and the re-filing are one edit.
+        if (action.sectionId === undefined) return next
+        return { ...next, tracks: assignSection(next.tracks, action.trackIds, action.sectionId) }
+      })
+
+    case 'setTrackSection':
+      return mapActive(state, (plan) => ({
+        ...plan,
+        tracks: assignSection(plan.tracks, action.trackIds, action.sectionId),
+      }))
+
+    case 'addSection':
+      return mapActive(state, (plan) => {
+        const sections = plan.sections ?? []
+        return {
+          ...plan,
+          sections: [
+            ...sections,
+            {
+              id: uid('sec'),
+              name: action.name || `Section ${sections.length + 1}`,
+              color: action.color ?? SECTION_COLORS[sections.length % SECTION_COLORS.length],
+            },
+          ],
+        }
+      })
+
+    case 'updateSection':
+      return mapActive(state, (plan) => ({
+        ...plan,
+        sections: (plan.sections ?? []).map((s) =>
+          s.id === action.id ? { ...s, ...action.patch } : s,
+        ),
+      }))
+
+    case 'deleteSection':
+      return mapActive(state, (plan) => ({
+        ...plan,
+        sections: (plan.sections ?? []).filter((s) => s.id !== action.id),
+        // Songs outlive their section: clear the pointer so they fall back
+        // to Unsorted instead of disappearing from the list.
+        tracks: assignSection(
+          plan.tracks,
+          Object.values(plan.tracks)
+            .filter((t) => t.sectionId === action.id)
+            .map((t) => t.id),
+          UNSORTED,
+        ),
+      }))
+
+    case 'moveSection':
+      return mapActive(state, (plan) => {
+        const sections = [...(plan.sections ?? [])]
+        const idx = sections.findIndex((s) => s.id === action.id)
+        const next = idx + action.delta
+        if (idx < 0 || next < 0 || next >= sections.length) return plan
+        const [moved] = sections.splice(idx, 1)
+        sections.splice(next, 0, moved)
+        return { ...plan, sections }
       })
 
     case 'assign':

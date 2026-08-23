@@ -3,6 +3,7 @@ import { useStore } from './lib/store.tsx'
 import { MOBILE_QUERY, useMediaQuery } from './lib/useMediaQuery.ts'
 import { SpotifyProvider, useSpotify } from './spotify/SpotifyProvider.tsx'
 import SongLibrary from './components/SongLibrary.tsx'
+import PlaylistView from './components/PlaylistView.tsx'
 import ScheduleBoard from './components/ScheduleBoard.tsx'
 import BlockInspector from './components/BlockInspector.tsx'
 import ImportScheduleModal from './components/ImportScheduleModal.tsx'
@@ -10,7 +11,7 @@ import SpotifyImportModal from './components/SpotifyImportModal.tsx'
 import RunOfShow from './components/RunOfShow.tsx'
 import SettingsView from './components/SettingsView.tsx'
 
-type Tab = 'plan' | 'run' | 'settings'
+type Tab = 'plan' | 'playlist' | 'run' | 'settings'
 
 function Shell() {
   const { state, plan, dispatch } = useStore()
@@ -76,6 +77,7 @@ function Shell() {
           {(
             [
               ['plan', 'Plan'],
+              ['playlist', 'Playlist'],
               ['run', 'Run sheet'],
               ['settings', 'Settings'],
             ] as [Tab, string][]
@@ -200,6 +202,12 @@ function Shell() {
               onOpenImport={() => setSongsModal(true)}
             />
           )}
+        </div>
+      )}
+
+      {tab === 'playlist' && (
+        <div className="workspace">
+          <PlaylistView onOpenImport={() => setSongsModal(true)} />
         </div>
       )}
 

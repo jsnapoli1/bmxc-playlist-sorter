@@ -3,6 +3,7 @@ import { useStore } from '../lib/store.tsx'
 import type { Track } from '../lib/types.ts'
 import { formatDuration } from '../lib/time.ts'
 import { setTrackDrag } from '../lib/dnd.ts'
+import { UNSORTED } from '../lib/playlistOrder.ts'
 
 type Props = {
   /** Block that "+" adds to; null when nothing is selected. */
@@ -67,6 +68,7 @@ export default function SongLibrary({ selectedBlockId, selectedBlockLabel, onOpe
   const { plan, dispatch } = useStore()
   const [query, setQuery] = useState('')
   const [sourceFilter, setSourceFilter] = useState('all')
+  const [sectionFilter, setSectionFilter] = useState('all')
   const [hideUsed, setHideUsed] = useState(false)
 
   /** trackId -> how many blocks it already appears in. */
@@ -84,12 +86,19 @@ export default function SongLibrary({ selectedBlockId, selectedBlockLabel, onOpe
     const q = query.trim().toLowerCase()
     return Object.values(plan.tracks)
       .filter((t) => (sourceFilter === 'all' ? true : t.sourceId === sourceFilter))
+      .filter((t) => {
+        // Sections come from the master playlist view; filtering by one is
+        // how you fill a waterfront block from the songs marked "Lake".
+        if (sectionFilter === 'all') return true
+        if (sectionFilter === UNSORTED) return !t.sectionId
+        return t.sectionId === sectionFilter
+      })
       .filter((t) => (hideUsed ? !usage.has(t.id) : true))
       .filter((t) =>
         !q ? true : `${t.name} ${t.artists} ${t.album}`.toLowerCase().includes(q),
       )
       .sort((a, b) => a.name.localeCompare(b.name))
-  }, [plan.tracks, query, sourceFilter, hideUsed, usage])
+  }, [plan.tracks, query, sourceFilter, sectionFilter, hideUsed, usage])
 
   const total = Object.keys(plan.tracks).length
   const unplaced = total - usage.size
@@ -117,6 +126,21 @@ export default function SongLibrary({ selectedBlockId, selectedBlockLabel, onOpe
                 {s.name}
               </option>
             ))}
+          </select>
+        )}
+        {(plan.sections ?? []).length > 0 && (
+          <select
+            value={sectionFilter}
+            onChange={(e) => setSectionFilter(e.target.value)}
+            aria-label="Filter by section"
+          >
+            <option value="all">All sections</option>
+            {(plan.sections ?? []).map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+            <option value={UNSORTED}>Unsorted</option>
           </select>
         )}
         <div className="row tiny faint" style={{ justifyContent: 'space-between' }}>
