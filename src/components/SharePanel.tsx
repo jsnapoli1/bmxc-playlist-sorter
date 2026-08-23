@@ -94,10 +94,14 @@ export default function SharePanel({ session }: { session: SessionInfo }) {
     if (!isOwner) return
     try {
       const res = await fetch('/api/links')
-      if (!res.ok) throw new Error((await res.json()).error ?? 'Could not load sharing settings.')
-      const data = (await res.json()) as { links: Link[]; collaborators: Collaborator[] }
-      setLinks(data.links)
-      setPeople(data.collaborators)
+      const data = (await res.json()) as {
+        links?: Link[]
+        collaborators?: Collaborator[]
+        error?: string
+      }
+      if (!res.ok) throw new Error(data.error ?? 'Could not load sharing settings.')
+      setLinks(data.links ?? [])
+      setPeople(data.collaborators ?? [])
     } catch (err) {
       setError((err as Error).message)
     }
@@ -116,7 +120,10 @@ export default function SharePanel({ session }: { session: SessionInfo }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role }),
       })
-      if (!res.ok) throw new Error((await res.json()).error ?? 'Could not create the link.')
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(data.error ?? 'Could not create the link.')
+      }
       await load()
     } catch (err) {
       setError((err as Error).message)
@@ -168,9 +175,10 @@ export default function SharePanel({ session }: { session: SessionInfo }) {
       <section className="card">
         <h3>Sharing</h3>
         <p className="tiny faint">
-          You joined this plan as <strong>{session.displayName}</strong> (
-          {session.role === 'editor' ? 'can edit' : 'view only'}). Only the plan owner can
-          manage invite links.
+          You joined <strong>{session.planName || 'this playlist'}</strong> as{' '}
+          <strong>{session.displayName}</strong> (
+          {session.role === 'editor' ? 'can edit' : 'view only'}). Your link is for this
+          playlist only. Only the owner can manage invite links.
         </p>
       </section>
     )
@@ -181,10 +189,12 @@ export default function SharePanel({ session }: { session: SessionInfo }) {
 
   return (
     <section className="card">
-      <h3>Sharing</h3>
+      <h3>Sharing “{session.planName || 'this playlist'}”</h3>
       <p className="tiny faint">
-        Anyone with a link can open this plan without a Spotify account. Treat the editor
-        link like a password: it lets someone change the plan and the real Spotify playlist.
+        These links are for <strong>{session.planName || 'this playlist'}</strong> only —
+        each playlist has its own, and someone who joins one cannot see the others. Anyone
+        with a link can open it without a Spotify account. Treat the editor link like a
+        password: it lets someone change the plan and the real Spotify playlist.
       </p>
 
       {error && <div className="notice error">{error}</div>}
@@ -204,7 +214,7 @@ export default function SharePanel({ session }: { session: SessionInfo }) {
         onCreate={() => void createLink('viewer')}
       />
 
-      <h4>Who has access</h4>
+      <h4>Who has access to this playlist</h4>
       <div className="people">
         {people.map((p) => (
           <div className="row person" key={p.id}>
