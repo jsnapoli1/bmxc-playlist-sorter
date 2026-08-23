@@ -270,7 +270,9 @@ function Shell({ session, shared, authError }: ShellProps) {
       <DuckPal placed={placed} />
 
       {scheduleModal && <ImportScheduleModal onClose={() => setScheduleModal(false)} />}
-      {songsModal && <SpotifyImportModal onClose={() => setSongsModal(false)} />}
+      {songsModal && (
+        <SpotifyImportModal onClose={() => setSongsModal(false)} isShared={Boolean(session)} />
+      )}
     </div>
   )
 }

@@ -426,8 +426,12 @@ async function listPlans(env: Env, session: Session): Promise<Response> {
 async function createPlan(request: Request, env: Env, session: Session, url: URL): Promise<Response> {
   if (session.role !== 'owner') return fail('Only the plan owner can start another playlist.', 403)
 
-  const body = (await request.json().catch(() => ({}))) as { name?: string }
+  const body = (await request.json().catch(() => ({}))) as {
+    name?: string
+    spotifyPlaylistId?: string
+  }
   const name = (body.name ?? '').trim().slice(0, 100) || 'New playlist'
+  const spotifyPlaylistId = body.spotifyPlaylistId?.trim() || null
 
   const owner = await env.DB.prepare('SELECT owner_id FROM plans WHERE id = ?')
     .bind(session.planId)
@@ -438,9 +442,10 @@ async function createPlan(request: Request, env: Env, session: Session, url: URL
   const planId = `plan_${randomToken(12)}`
   const doc = emptyPlan(planId, name)
   await env.DB.prepare(
-    'INSERT INTO plans (id, owner_id, name, doc, rev, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)',
+    `INSERT INTO plans (id, owner_id, name, doc, rev, spotify_playlist_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
   )
-    .bind(planId, owner.owner_id, name, JSON.stringify(doc), now, now)
+    .bind(planId, owner.owner_id, name, JSON.stringify(doc), spotifyPlaylistId, now, now)
     .run()
 
   return switchTo(env, session, planId, url, owner.owner_id)

@@ -18,7 +18,14 @@ export function parsePlaylistRef(input: string): string | null {
   return null
 }
 
-export default function SpotifyImportModal({ onClose }: { onClose: () => void }) {
+export default function SpotifyImportModal({
+  onClose,
+  isShared = false,
+}: {
+  onClose: () => void
+  /** True when this plan lives on the server and can sync to Spotify. */
+  isShared?: boolean
+}) {
   const { plan, dispatch } = useStore()
   const current = sourceOf(plan)
   const {
@@ -35,6 +42,7 @@ export default function SpotifyImportModal({ onClose }: { onClose: () => void })
   const [progress, setProgress] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
+  const [syncNote, setSyncNote] = useState<string | null>(null)
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -71,19 +79,66 @@ export default function SpotifyImportModal({ onClose }: { onClose: () => void })
         importedAt: Date.now(),
       }
 
+      /**
+       * Point the server's Spotify sync at the playlist just imported.
+       *
+       * Without this the plan has the songs but no idea where to write
+       * them back, and the only way to say so was to paste the same
+       * playlist link a second time under Settings.
+       */
+      const setSyncTarget = async () => {
+        if (!isShared) return
+        try {
+          const res = await fetch('/api/playlist', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ playlistId: playlist.id }),
+          })
+          if (!res.ok) {
+            const body = (await res.json().catch(() => ({}))) as { error?: string }
+            // Not fatal: the songs imported fine, only the write-back
+            // could not be armed. Say so rather than failing silently.
+            setSyncNote(
+              body.error ??
+                'The songs imported, but Spotify sync could not be turned on for this playlist.',
+            )
+          }
+        } catch {
+          setSyncNote('The songs imported, but Spotify sync could not be turned on right now.')
+        }
+      }
+
       if (!current) {
         // Nothing imported yet — fill this plan rather than leaving an
         // empty one behind.
         dispatch({ type: 'addTracks', tracks })
         dispatch({ type: 'addSource', source })
         dispatch({ type: 'renamePlan', id: plan.id, name: playlist.name })
+        await setSyncTarget()
         setDone(`Imported ${tracks.length} songs from “${playlist.name}”.`)
       } else if (playlist.id === current.id) {
         // Re-importing the same playlist refreshes it in place, keeping
         // every section and schedule placement.
         dispatch({ type: 'addTracks', tracks })
         dispatch({ type: 'addSource', source })
+        await setSyncTarget()
         setDone(`Refreshed “${playlist.name}” — ${tracks.length} songs.`)
+      } else if (isShared) {
+        // On a shared account a plan lives on the server, so ask it to
+        // make one for this playlist and switch to it. The reload picks
+        // up the new session; the songs import into it on the way.
+        const res = await fetch('/api/plans', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: playlist.name, spotifyPlaylistId: playlist.id }),
+        })
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string }
+          throw new Error(body.error ?? 'Could not open that playlist as its own plan.')
+        }
+        setDone(`Opening “${playlist.name}”…`)
+        window.location.reload()
+        return
       } else {
         // A different playlist gets its own plan, with its own sections
         // and schedule, and becomes the active one.
@@ -137,6 +192,7 @@ export default function SpotifyImportModal({ onClose }: { onClose: () => void })
               <div className="banner error tiny">{error || connectionError}</div>
             )}
             {done && <div className="banner ok tiny">{done}</div>}
+            {syncNote && <div className="banner error tiny">{syncNote}</div>}
 
             <div className="row" style={{ marginBottom: 10 }}>
               <input

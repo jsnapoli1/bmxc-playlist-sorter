@@ -237,9 +237,12 @@ export default function SharePanel({ session }: { session: SessionInfo }) {
 
       <h4>Spotify playlist</h4>
       <p className="tiny faint">
-        The master playlist order is written back to this playlist. It must be owned by the
-        connected Spotify account — Spotify does not allow reordering anyone else's playlist.
-        Sections are an idea in this app only; Spotify receives the flattened order.
+        {session.spotifyPlaylistId
+          ? 'The master playlist order is written back to this playlist, a few seconds after edits settle.'
+          : 'Set automatically when you import a playlist — import one and this fills itself in. You can also paste a link here.'}{' '}
+        It must be owned by the connected Spotify account: Spotify does not allow reordering
+        anyone else's playlist. Sections are an idea in this app only; Spotify receives the
+        flattened order.
       </p>
       <div className="row" style={{ gap: 6 }}>
         <input
