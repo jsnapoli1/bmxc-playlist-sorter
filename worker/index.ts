@@ -158,15 +158,31 @@ function authLogin(env: Env, url: URL): Response {
  * refresh token, and give the owner a session for their plan.
  */
 async function authCallback(request: Request, env: Env, url: URL): Promise<Response> {
+  // Spotify reports a refusal by redirecting back with ?error=... Carry both
+  // the code and its description to the app; dropping them left the user on
+  // the calendar with no idea what went wrong.
   const error = url.searchParams.get('error')
-  if (error) return Response.redirect(`${url.origin}/?auth_error=${encodeURIComponent(error)}`, 302)
+  if (error) {
+    const detail = url.searchParams.get('error_description') ?? ''
+    const params = new URLSearchParams({ auth_error: error })
+    if (detail) params.set('auth_error_detail', detail)
+    return Response.redirect(`${url.origin}/?${params}`, 302)
+  }
 
   const code = url.searchParams.get('code')
   const state = url.searchParams.get('state')
   const expected = readCookie(request, OAUTH_STATE_COOKIE)
-  if (!code) return fail('Spotify did not return a code.', 400)
+  const bounce = (message: string) =>
+    Response.redirect(
+      `${url.origin}/?${new URLSearchParams({ auth_error: 'sign_in_failed', auth_error_detail: message })}`,
+      302,
+    )
+
+  if (!code) return bounce('Spotify did not return an authorization code.')
   if (!state || !expected || state !== expected) {
-    return fail('Sign-in state did not match. Please try again.', 400)
+    return bounce(
+      'The sign-in could not be verified. This usually means the browser blocked the sign-in cookie — try again without private browsing.',
+    )
   }
 
   let tokens
@@ -178,7 +194,7 @@ async function authCallback(request: Request, env: Env, url: URL): Promise<Respo
       clientSecret: env.SPOTIFY_CLIENT_SECRET,
     })
   } catch (err) {
-    return fail((err as Error).message, 400)
+    return bounce((err as Error).message)
   }
 
   const client = new OwnerSpotify(
@@ -186,7 +202,16 @@ async function authCallback(request: Request, env: Env, url: URL): Promise<Respo
     env.SPOTIFY_CLIENT_ID,
     env.SPOTIFY_CLIENT_SECRET,
   )
-  const me = await client.me()
+  // In Development mode Spotify refuses /me for accounts not listed under
+  // User Management, which would otherwise surface as an unhandled 500.
+  let me
+  try {
+    me = await client.me()
+  } catch (err) {
+    return bounce(
+      `${(err as Error).message} If this app is still in Development mode on Spotify, add this account under User Management in the Spotify dashboard.`,
+    )
+  }
 
   const now = Date.now()
   const sealed = await sealRefreshToken(tokens.refreshToken, env.ENCRYPTION_KEY)

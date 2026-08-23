@@ -5,6 +5,7 @@ import { StoreProvider } from './lib/store.tsx'
 import { useSharedPlan } from './lib/useSharedPlan.ts'
 import { PreviewPlayerProvider } from './lib/usePreviewPlayer.tsx'
 import type { Role } from './lib/protocol.ts'
+import { takeAuthError, type AuthError } from './lib/authError.ts'
 
 export type SessionInfo = {
   collaboratorId: string
@@ -29,7 +30,7 @@ function joinTokenFromUrl(): string | null {
  * still works with no backend at all — that matters because the app has to
  * keep working offline at camp.
  */
-function Shell({ session }: { session: SessionInfo | null }) {
+function Shell({ session, authError }: { session: SessionInfo | null; authError: AuthError | null }) {
   const shared = useSharedPlan(Boolean(session))
 
   // While a shared plan is still loading, render nothing rather than
@@ -56,13 +57,15 @@ function Shell({ session }: { session: SessionInfo | null }) {
   return (
     <StoreProvider shared={session ? { plan: shared.plan, send: shared.send } : undefined}>
       <PreviewPlayerProvider>
-        <App session={session} shared={shared} />
+        <App session={session} shared={shared} authError={authError} />
       </PreviewPlayerProvider>
     </StoreProvider>
   )
 }
 
 export default function Root() {
+  // Read once at mount, before the URL is tidied up elsewhere.
+  const [authError] = useState<AuthError | null>(takeAuthError)
   const [session, setSession] = useState<SessionInfo | null>(null)
   const [checked, setChecked] = useState(false)
   const [joinToken, setJoinToken] = useState<string | null>(joinTokenFromUrl)
@@ -103,5 +106,5 @@ export default function Root() {
   // visitor actually has a shared plan.
   if (!checked) return null
 
-  return <Shell session={session} />
+  return <Shell session={session} authError={authError} />
 }

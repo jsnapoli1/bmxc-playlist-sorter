@@ -4,6 +4,7 @@ import { useSpotify } from '../spotify/SpotifyProvider.tsx'
 import SharePanel from './SharePanel.tsx'
 import type { SessionInfo } from '../Root.tsx'
 import { planLabel, sourceOf } from '../lib/planMigration.ts'
+import type { AuthError } from '../lib/authError.ts'
 import SpotifySetup from './SpotifySetup.tsx'
 import SpotifyDiagnostics from './SpotifyDiagnostics.tsx'
 import ScopeNotice from './ScopeNotice.tsx'
@@ -11,7 +12,13 @@ import { createPlaylistWithTracks } from '../spotify/api.ts'
 import { minutesOf } from '../lib/time.ts'
 import { loadToken } from '../spotify/auth.ts'
 
-export default function SettingsView({ session }: { session: SessionInfo | null }) {
+export default function SettingsView({
+  session,
+  authError,
+}: {
+  session: SessionInfo | null
+  authError?: AuthError | null
+}) {
   const { state, plan, dispatch, exportJson, importJson } = useStore()
   const { status, user, disconnect, redirectUri, error: connectionError, profileNote } = useSpotify()
   // A rejected account still has a token; without this the panel below would
@@ -81,6 +88,16 @@ export default function SettingsView({ session }: { session: SessionInfo | null 
         {!session && (
           <div className="card">
             <h3>Share this plan</h3>
+            {authError && (
+              <div className="notice error" style={{ marginBottom: 10 }}>
+                <strong>Spotify did not complete the sign-in.</strong>
+                <div className="tiny" style={{ marginTop: 4 }}>{authError.advice}</div>
+                <div className="tiny faint" style={{ marginTop: 6 }}>
+                  Spotify said: {authError.code}
+                  {authError.detail ? ` — ${authError.detail}` : ''}
+                </div>
+              </div>
+            )}
             <p className="tiny faint">
               Sign in with the camp's Spotify account to put this plan online. Everyone else
               gets an invite link and edits alongside you — no Spotify account needed on

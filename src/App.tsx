@@ -15,6 +15,7 @@ import DuckPal from './components/duckpal/DuckPal.tsx'
 import type { SessionInfo } from './Root.tsx'
 import type { SharedPlan } from './lib/useSharedPlan.ts'
 import { planLabel } from './lib/planMigration.ts'
+import type { AuthError } from './lib/authError.ts'
 
 type Tab = 'plan' | 'playlist' | 'run' | 'settings'
 
@@ -24,12 +25,13 @@ const NEW_PLAYLIST = '__new_playlist__'
 type ShellProps = {
   session: SessionInfo | null
   shared: SharedPlan
+  authError: AuthError | null
 }
 
-function Shell({ session, shared }: ShellProps) {
+function Shell({ session, shared, authError }: ShellProps) {
   const { state, plan, dispatch } = useStore()
   const { status, user, connect, hasBuiltInClientId } = useSpotify()
-  const [tab, setTab] = useState<Tab>('plan')
+  const [tab, setTab] = useState<Tab>(authError ? 'settings' : 'plan')
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
   const [scheduleModal, setScheduleModal] = useState(false)
   const [songsModal, setSongsModal] = useState(false)
@@ -258,7 +260,7 @@ function Shell({ session, shared }: ShellProps) {
 
       {tab === 'settings' && (
         <div className="workspace">
-          <SettingsView session={session} />
+          <SettingsView session={session} authError={authError} />
         </div>
       )}
 
@@ -270,10 +272,10 @@ function Shell({ session, shared }: ShellProps) {
   )
 }
 
-export default function App({ session, shared }: ShellProps) {
+export default function App({ session, shared, authError }: ShellProps) {
   return (
     <SpotifyProvider>
-      <Shell session={session} shared={shared} />
+      <Shell session={session} shared={shared} authError={authError} />
     </SpotifyProvider>
   )
 }
