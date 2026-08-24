@@ -108,6 +108,21 @@ export function playlistRows(plan: Plan): PlaylistRow[] {
 }
 
 /**
+ * Every track in the order the playlist view shows them: section by
+ * section, in each section's own order, with unsorted songs last.
+ *
+ * This — not `orderedTracks` — is what Spotify should receive. `trackOrder`
+ * alone is the raw drag order and says nothing about section grouping, so
+ * pushing it sends songs interleaved rather than gathered under their
+ * sections.
+ */
+export function displayOrderedTracks(plan: Plan): Track[] {
+  return playlistRows(plan)
+    .filter((row): row is Extract<PlaylistRow, { kind: 'track' }> => row.kind === 'track')
+    .map((row) => row.track)
+}
+
+/**
  * Move `movingIds` so they sit immediately before `beforeId`, or at the end
  * when it is null. Returns a new id list; the input is not mutated.
  *

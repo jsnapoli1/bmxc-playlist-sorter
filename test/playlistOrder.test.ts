@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import {
   assignSection,
+  displayOrderedTracks,
   firstIdOfSection,
   formatLongDuration,
   moveTracks,
@@ -336,4 +337,99 @@ test('a song with no duration does not poison a section total', () => {
   // Assert
   assert.ok(header?.kind === 'header')
   assert.equal(header.durationMs, 120_000)
+})
+
+test('the display order groups songs by section, not by drag order', () => {
+  // Arrange — what Spotify receives must match what the screen shows.
+  // trackOrder is the raw drag order and interleaves the sections.
+  const p = plan(
+    [
+      track('a', { sectionId: 'feels' }),
+      track('b', { sectionId: 'run' }),
+      track('c', { sectionId: 'lake' }),
+      track('d', { sectionId: 'run' }),
+    ],
+    {
+      trackOrder: ['a', 'b', 'c', 'd'],
+      sections: [
+        { id: 'run', name: 'Run', color: '#ef4444' },
+        { id: 'lake', name: 'Lake', color: '#0ea5e9' },
+        { id: 'feels', name: 'Feels', color: '#f59e0b' },
+      ],
+    },
+  )
+
+  // Act
+  const shown = displayOrderedTracks(p).map((t) => t.id)
+
+  // Assert — Run's songs, then Lake's, then Feels'.
+  assert.deepEqual(shown, ['b', 'd', 'c', 'a'])
+})
+
+test('the display order follows the section order, not the section ids', () => {
+  // Arrange — moving a section must change what Spotify receives.
+  const sections = [
+    { id: 'lake', name: 'Lake', color: '#0ea5e9' },
+    { id: 'run', name: 'Run', color: '#ef4444' },
+  ]
+  const p = plan([track('a', { sectionId: 'run' }), track('b', { sectionId: 'lake' })], {
+    trackOrder: ['a', 'b'],
+    sections,
+  })
+
+  // Act
+  const shown = displayOrderedTracks(p).map((t) => t.id)
+
+  // Assert — Lake is first in the section list, so its song leads.
+  assert.deepEqual(shown, ['b', 'a'])
+})
+
+test('unsorted songs come last in the display order', () => {
+  // Arrange
+  const p = plan([track('a'), track('b', { sectionId: 'run' })], {
+    trackOrder: ['a', 'b'],
+    sections: [{ id: 'run', name: 'Run', color: '#ef4444' }],
+  })
+
+  // Act
+  const shown = displayOrderedTracks(p).map((t) => t.id)
+
+  // Assert
+  assert.deepEqual(shown, ['b', 'a'])
+})
+
+test('within a section, songs keep their hand-arranged order', () => {
+  // Arrange
+  const p = plan([track('a', { sectionId: 'run' }), track('b', { sectionId: 'run' })], {
+    trackOrder: ['b', 'a'],
+    sections: [{ id: 'run', name: 'Run', color: '#ef4444' }],
+  })
+
+  // Act
+  const shown = displayOrderedTracks(p).map((t) => t.id)
+
+  // Assert
+  assert.deepEqual(shown, ['b', 'a'])
+})
+
+test('the display order matches exactly what the rows render', () => {
+  // Arrange — the two must never drift apart.
+  const p = plan(
+    [track('a', { sectionId: 'run' }), track('b'), track('c', { sectionId: 'lake' })],
+    {
+      trackOrder: ['c', 'b', 'a'],
+      sections: [
+        { id: 'run', name: 'Run', color: '#ef4444' },
+        { id: 'lake', name: 'Lake', color: '#0ea5e9' },
+      ],
+    },
+  )
+
+  // Act
+  const fromRows = playlistRows(p)
+    .filter((r) => r.kind === 'track')
+    .map((r) => (r.kind === 'track' ? r.track.id : ''))
+
+  // Assert
+  assert.deepEqual(displayOrderedTracks(p).map((t) => t.id), fromRows)
 })

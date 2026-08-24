@@ -15,7 +15,7 @@ import type { Plan } from '../src/lib/types.ts'
 import type { ClientMessage, Op, Presence, Role, ServerMessage, SyncState } from '../src/lib/protocol.ts'
 import { canEdit, MAX_OPS_PER_MESSAGE } from '../src/lib/protocol.ts'
 import { applyOps } from '../src/lib/applyOp.ts'
-import { orderedTracks } from '../src/lib/playlistOrder.ts'
+import { displayOrderedTracks } from '../src/lib/playlistOrder.ts'
 import { missingFromSpotify, reorderMoves } from '../src/lib/spotifyDiff.ts'
 import { OwnerSpotify, SpotifyError, sealRefreshToken } from './spotify.ts'
 import type { Env } from './env.ts'
@@ -266,8 +266,8 @@ export class PlanRoom implements DurableObject {
   }
 
   private masterOrderChanged(before: Plan, after: Plan): boolean {
-    const a = orderedTracks(before).map((t) => t.uri)
-    const b = orderedTracks(after).map((t) => t.uri)
+    const a = displayOrderedTracks(before).map((t) => t.uri)
+    const b = displayOrderedTracks(after).map((t) => t.uri)
     if (a.length !== b.length) return true
     return a.some((uri, i) => uri !== b[i])
   }
@@ -322,7 +322,8 @@ export class PlanRoom implements DurableObject {
 
       const current = await spotify.playlistTrackUris(playlistId)
       // Local songs have no Spotify uri and simply do not participate.
-      const target = orderedTracks(this.plan)
+      // The order on screen, grouped by section — not the raw drag order.
+      const target = displayOrderedTracks(this.plan)
         .map((t) => t.uri)
         .filter(Boolean)
 
