@@ -26,6 +26,11 @@ const SYNC_DEBOUNCE_MS = 5_000
 const PERSIST_DEBOUNCE_MS = 2_000
 /** Give up on a sync that keeps failing, rather than hammering Spotify. */
 const MAX_SYNC_FAILURES = 3
+/**
+ * How often to re-read the playlist from Spotify while someone has it
+ * open, so a song added in the Spotify app shows up on its own.
+ */
+const POLL_MS = 15_000
 
 type Session = {
   socket: WebSocket
@@ -56,6 +61,10 @@ export class PlanRoom implements DurableObject {
   private syncRunning = false
   /** Set when an edit lands while a sync is in flight. */
   private syncQueued = false
+  private pollTimer: number | null = null
+  private polling = false
+  /** Track ids last seen on Spotify, to skip work when nothing changed. */
+  private lastPollSignature = ''
 
   // `state` is required by the runtime's constructor signature. This room
   // keeps its authoritative copy in D1 rather than DO storage, so the handle
@@ -135,7 +144,12 @@ export class PlanRoom implements DurableObject {
         error: null,
         playlistName: null,
       })
-      if (next) this.scheduleSync()
+      if (next) {
+        this.scheduleSync()
+        this.startPolling()
+      } else {
+        this.stopPolling()
+      }
       return new Response(null, { status: 204 })
     }
 
@@ -156,9 +170,13 @@ export class PlanRoom implements DurableObject {
     const drop = () => {
       this.sessions.delete(server)
       this.broadcastPresence()
+      // Nobody is watching; stop calling Spotify.
+      if (this.sessions.size === 0) this.stopPolling()
     }
     server.addEventListener('close', drop)
     server.addEventListener('error', drop)
+
+    this.startPolling()
 
     this.send(server, {
       t: 'snapshot',
@@ -270,6 +288,78 @@ export class PlanRoom implements DurableObject {
     const b = displayOrderedTracks(after).map((t) => t.uri)
     if (a.length !== b.length) return true
     return a.some((uri, i) => uri !== b[i])
+  }
+
+  // --- polling Spotify for new songs ------------------------------------
+
+  private startPolling(): void {
+    if (this.pollTimer !== null || !this.spotifyPlaylistId) return
+    this.pollTimer = setInterval(() => void this.pollPlaylist(), POLL_MS) as unknown as number
+    // Check straight away too, so opening the page picks up new songs
+    // without waiting a full interval.
+    void this.pollPlaylist()
+  }
+
+  private stopPolling(): void {
+    if (this.pollTimer !== null) {
+      clearInterval(this.pollTimer)
+      this.pollTimer = null
+    }
+  }
+
+  /**
+   * Re-read the playlist and fold in anything that changed on Spotify's
+   * side — songs added or removed in the Spotify app.
+   *
+   * Runs server-side so one poll serves everyone with the plan open, and
+   * so it works for collaborators who have no Spotify account of their
+   * own. Skips entirely when the song list is unchanged, which is the
+   * normal case, so a quiet plan costs one read every 15s and no writes.
+   */
+  private async pollPlaylist(): Promise<void> {
+    if (this.polling || !this.plan || !this.spotifyPlaylistId) return
+    // A push in flight would race a pull; the next tick will catch up.
+    if (this.syncRunning || this.sync.status === 'paused') return
+    this.polling = true
+
+    try {
+      const spotify = await this.ownerClient()
+      const tracks = await spotify.playlistTracks(this.spotifyPlaylistId)
+
+      const signature = tracks.map((t) => t.id).join(',')
+      if (signature === this.lastPollSignature) return
+      this.lastPollSignature = signature
+
+      const known = new Set(Object.keys(this.plan.tracks))
+      const added = tracks.filter((t) => !known.has(t.id)).length
+      const removed = [...known].filter(
+        (id) =>
+          this.plan?.tracks[id]?.sourceId === this.spotifyPlaylistId &&
+          !tracks.some((t) => t.id === id),
+      ).length
+      if (added === 0 && removed === 0) return
+
+      const op: Op = {
+        type: 'syncTracks',
+        tracks,
+        sourceId: this.spotifyPlaylistId,
+      }
+      this.plan = applyOps(this.plan, [op])
+      this.rev += 1
+      // Everyone applies the same op, so the change lands identically in
+      // every open browser.
+      this.broadcast({ t: 'ops', rev: this.rev, ops: [op], from: 'spotify' })
+      this.schedulePersist()
+      console.log(
+        `poll: plan=${this.planId} added=${added} removed=${removed} total=${tracks.length}`,
+      )
+    } catch (err) {
+      // A failed poll is not worth surfacing: the plan is unaffected and
+      // the next tick retries.
+      console.log(`poll failed: plan=${this.planId} ${(err as Error).message}`)
+    } finally {
+      this.polling = false
+    }
   }
 
   // --- Spotify sync ---------------------------------------------------

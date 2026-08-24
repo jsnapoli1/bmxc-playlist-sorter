@@ -381,3 +381,71 @@ test('syncTracks applied twice is stable', () => {
   // Assert
   assert.deepEqual(twice, once)
 })
+
+test('a poll that finds new songs adds them without disturbing sorting', () => {
+  // Arrange — someone added 'c' in the Spotify app.
+  const start = plan({
+    tracks: {
+      a: track('a', { sourceId: 's1', sectionId: 'sec_lake' }),
+      b: track('b', { sourceId: 's1' }),
+    },
+    trackOrder: ['b', 'a'],
+  })
+
+  // Act
+  const next = applyOp(start, {
+    type: 'syncTracks',
+    sourceId: 's1',
+    tracks: [
+      track('a', { sourceId: 's1' }),
+      track('b', { sourceId: 's1' }),
+      track('c', { sourceId: 's1' }),
+    ],
+  })
+
+  // Assert — new song appended, hand order and filing intact.
+  assert.deepEqual(orderedTrackIds(next), ['b', 'a', 'c'])
+  assert.equal(next.tracks.a.sectionId, 'sec_lake')
+})
+
+test('a poll finding no change produces an identical plan', () => {
+  // Arrange — the normal case, fifteen seconds apart.
+  const start = plan({
+    tracks: { a: track('a', { sourceId: 's1', sectionId: 'sec_run' }) },
+    trackOrder: ['a'],
+  })
+
+  // Act
+  const next = applyOp(start, {
+    type: 'syncTracks',
+    sourceId: 's1',
+    tracks: [track('a', { sourceId: 's1' })],
+  })
+
+  // Assert
+  assert.deepEqual(next.tracks, start.tracks)
+  assert.deepEqual(orderedTrackIds(next), orderedTrackIds(start))
+})
+
+test('a poll does not touch songs a collaborator placed on the schedule', () => {
+  // Arrange — 'b' was removed from Spotify but is on Monday's block.
+  const start = plan({
+    tracks: { a: track('a', { sourceId: 's1' }), b: track('b', { sourceId: 's1' }) },
+    trackOrder: ['a', 'b'],
+    blocks: [
+      { id: 'blk', dayId: 'd', title: '', start: '', end: '', location: '',
+        category: 'Other', notes: '', entries: [{ id: 'e', trackId: 'b', note: 'sing-along' }] },
+    ],
+  })
+
+  // Act
+  const next = applyOp(start, {
+    type: 'syncTracks',
+    sourceId: 's1',
+    tracks: [track('a', { sourceId: 's1' })],
+  })
+
+  // Assert
+  assert.ok(next.tracks.b)
+  assert.equal(next.blocks[0].entries[0].note, 'sing-along')
+})

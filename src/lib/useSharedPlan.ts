@@ -174,7 +174,26 @@ export function useSharedPlan(enabled: boolean): SharedPlan {
 
     connect()
 
+    /**
+     * A phone suspends timers and sockets when the tab is backgrounded, so
+     * returning to it can mean sitting on a stale plan. Re-check the
+     * connection on wake; a dead socket reconnects and its snapshot brings
+     * everything current.
+     */
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      const sock = socketRef.current
+      if (!sock || sock.readyState === WebSocket.CLOSED || sock.readyState === WebSocket.CLOSING) {
+        attemptRef.current = 0
+        connect()
+      } else if (sock.readyState === WebSocket.OPEN) {
+        sock.send(JSON.stringify({ t: 'hello', since: 0 } satisfies ClientMessage))
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+
     return () => {
+      document.removeEventListener('visibilitychange', onVisible)
       closedRef.current = true
       window.clearTimeout(reconnectTimer)
       window.clearInterval(pingTimer)

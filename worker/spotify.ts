@@ -21,6 +21,19 @@ export type OwnerTokens = {
   scopes: string
 }
 
+/** A song as the app stores it, built from Spotify's response. */
+export type SpotifyTrack = {
+  id: string
+  uri: string
+  name: string
+  artists: string
+  album: string
+  albumArt?: string
+  durationMs: number
+  explicit: boolean
+  sourceId: string
+}
+
 export class SpotifyError extends Error {
   constructor(
     message: string,
@@ -249,6 +262,55 @@ export class OwnerSpotify {
       url = page.next
     }
     return uris
+  }
+
+  /**
+   * Every song in a playlist, with the detail the app stores.
+   *
+   * Same shape the browser importer produces, so a poll can be applied
+   * with the ordinary syncTracks op.
+   */
+  async playlistTracks(id: string): Promise<SpotifyTrack[]> {
+    type Raw = {
+      id: string | null
+      uri: string
+      name: string
+      duration_ms: number
+      explicit: boolean
+      artists?: { name: string }[]
+      album?: { name: string; images?: { url: string }[] }
+      type?: string
+    }
+
+    const out: SpotifyTrack[] = []
+    const seen = new Set<string>()
+    let url: string | null = `${API}/playlists/${id}/items?limit=100`
+
+    while (url) {
+      const page: { items: { item?: Raw | null; track?: Raw | null }[]; next: string | null } =
+        await this.call(url)
+      for (const entry of page.items ?? []) {
+        // February 2026 renamed `track` to `item`; accept either.
+        const raw = entry?.item ?? entry?.track
+        if (!raw || raw.type === 'episode') continue
+        const trackId = raw.id ?? (raw.uri ? `local:${raw.uri}` : null)
+        if (!trackId || seen.has(trackId)) continue
+        seen.add(trackId)
+        out.push({
+          id: trackId,
+          uri: raw.uri ?? '',
+          name: raw.name,
+          artists: raw.artists?.map((a) => a.name).join(', ') ?? '',
+          album: raw.album?.name ?? '',
+          albumArt: raw.album?.images?.at(-1)?.url,
+          durationMs: raw.duration_ms ?? 0,
+          explicit: Boolean(raw.explicit),
+          sourceId: id,
+        })
+      }
+      url = page.next
+    }
+    return out
   }
 
   /**
