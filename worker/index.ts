@@ -21,6 +21,7 @@ import type { Plan } from '../src/lib/types.ts'
 import type { Role } from '../src/lib/protocol.ts'
 import { randomToken, sha256Hex } from './crypto.ts'
 import { exchangeCode, OwnerSpotify, sealRefreshToken, SpotifyError } from './spotify.ts'
+import { mountPath, mountedUrl, stripMount } from './basePath.ts'
 import type { Env } from './env.ts'
 
 export { PlanRoom } from './PlanRoom.ts'
@@ -66,12 +67,22 @@ function readCookie(request: Request, name: string): string | null {
   return null
 }
 
-function setCookie(name: string, value: string, maxAge: number, secure: boolean): string {
+function setCookie(
+  name: string,
+  value: string,
+  maxAge: number,
+  secure: boolean,
+  mount = '/',
+): string {
   // HttpOnly so no script can read it; SameSite=Lax so it survives the
   // Spotify redirect back but is not sent on cross-site POSTs.
+  //
+  // Path is scoped to the mount so that when the app lives at
+  // bmxc.camp/playlist-builder these cookies are not attached to every
+  // request for the marketing site sharing the origin.
   return [
     `${name}=${encodeURIComponent(value)}`,
-    'Path=/',
+    `Path=${mount === '/' ? '/' : mount}`,
     'HttpOnly',
     'SameSite=Lax',
     secure ? 'Secure' : '',
@@ -134,9 +145,12 @@ function emptyPlan(id: string, name: string): Plan {
 // --- routes -----------------------------------------------------------
 
 /** Start the owner's Spotify sign-in. */
-function authLogin(env: Env, url: URL): Response {
+function authLogin(env: Env, url: URL, mount: string): Response {
   const state = randomToken(24)
-  const redirectUri = `${url.origin}/api/auth/callback`
+  // Built from the mount, not the origin: at bmxc.camp/playlist-builder the
+  // callback Spotify sends the browser back to must carry the prefix, and it
+  // has to match the URI registered in the Spotify dashboard byte for byte.
+  const redirectUri = mountedUrl(url, '/api/auth/callback', mount)
   const authorize = new URL('https://accounts.spotify.com/authorize')
   authorize.searchParams.set('client_id', env.SPOTIFY_CLIENT_ID)
   authorize.searchParams.set('response_type', 'code')
@@ -148,7 +162,7 @@ function authLogin(env: Env, url: URL): Response {
     status: 302,
     headers: {
       Location: authorize.toString(),
-      'Set-Cookie': setCookie(OAUTH_STATE_COOKIE, state, 600, isSecure(url)),
+      'Set-Cookie': setCookie(OAUTH_STATE_COOKIE, state, 600, isSecure(url), mount),
     },
   })
 }
@@ -157,7 +171,12 @@ function authLogin(env: Env, url: URL): Response {
  * Finish sign-in: exchange the code server-side, store the encrypted
  * refresh token, and give the owner a session for their plan.
  */
-async function authCallback(request: Request, env: Env, url: URL): Promise<Response> {
+async function authCallback(
+  request: Request,
+  env: Env,
+  url: URL,
+  mount: string,
+): Promise<Response> {
   // Spotify reports a refusal by redirecting back with ?error=... Carry both
   // the code and its description to the app; dropping them left the user on
   // the calendar with no idea what went wrong.
@@ -166,7 +185,7 @@ async function authCallback(request: Request, env: Env, url: URL): Promise<Respo
     const detail = url.searchParams.get('error_description') ?? ''
     const params = new URLSearchParams({ auth_error: error })
     if (detail) params.set('auth_error_detail', detail)
-    return Response.redirect(`${url.origin}/?${params}`, 302)
+    return Response.redirect(`${mountedUrl(url, '/', mount)}?${params}`, 302)
   }
 
   const code = url.searchParams.get('code')
@@ -174,7 +193,7 @@ async function authCallback(request: Request, env: Env, url: URL): Promise<Respo
   const expected = readCookie(request, OAUTH_STATE_COOKIE)
   const bounce = (message: string) =>
     Response.redirect(
-      `${url.origin}/?${new URLSearchParams({ auth_error: 'sign_in_failed', auth_error_detail: message })}`,
+      `${mountedUrl(url, '/', mount)}?${new URLSearchParams({ auth_error: 'sign_in_failed', auth_error_detail: message })}`,
       302,
     )
 
@@ -189,7 +208,7 @@ async function authCallback(request: Request, env: Env, url: URL): Promise<Respo
   try {
     tokens = await exchangeCode({
       code,
-      redirectUri: `${url.origin}/api/auth/callback`,
+      redirectUri: mountedUrl(url, '/api/auth/callback', mount),
       clientId: env.SPOTIFY_CLIENT_ID,
       clientSecret: env.SPOTIFY_CLIENT_SECRET,
     })
@@ -263,14 +282,20 @@ async function authCallback(request: Request, env: Env, url: URL): Promise<Respo
   return new Response(null, {
     status: 302,
     headers: {
-      Location: `${url.origin}/`,
-      'Set-Cookie': setCookie(SESSION_COOKIE, sessionToken, SESSION_MAX_AGE, isSecure(url)),
+      Location: mountedUrl(url, '/', mount),
+      'Set-Cookie': setCookie(SESSION_COOKIE, sessionToken, SESSION_MAX_AGE, isSecure(url), mount),
     },
   })
 }
 
 /** Redeem a share link for a session. */
-async function join(request: Request, env: Env, url: URL, token: string): Promise<Response> {
+async function join(
+  request: Request,
+  env: Env,
+  url: URL,
+  token: string,
+  mount: string,
+): Promise<Response> {
   const body = (await request.json().catch(() => ({}))) as { name?: string }
   const name = (body.name ?? '').trim().slice(0, 60)
   if (!name) return fail('Please enter a name so others know who is editing.', 400)
@@ -301,7 +326,7 @@ async function join(request: Request, env: Env, url: URL, token: string): Promis
 
   return json(
     { planId: link.plan_id, role: link.role, displayName: name },
-    { headers: { 'Set-Cookie': setCookie(SESSION_COOKIE, sessionToken, SESSION_MAX_AGE, isSecure(url)) } },
+    { headers: { 'Set-Cookie': setCookie(SESSION_COOKIE, sessionToken, SESSION_MAX_AGE, isSecure(url), mount) } },
   )
 }
 
@@ -446,7 +471,13 @@ async function listPlans(env: Env, session: Session): Promise<Response> {
 }
 
 /** Start another plan for the same owner, and switch this session to it. */
-async function createPlan(request: Request, env: Env, session: Session, url: URL): Promise<Response> {
+async function createPlan(
+  request: Request,
+  env: Env,
+  session: Session,
+  url: URL,
+  mount: string,
+): Promise<Response> {
   if (session.role !== 'owner') return fail('Only the plan owner can start another playlist.', 403)
 
   const body = (await request.json().catch(() => ({}))) as {
@@ -471,7 +502,7 @@ async function createPlan(request: Request, env: Env, session: Session, url: URL
     .bind(planId, owner.owner_id, name, JSON.stringify(doc), spotifyPlaylistId, now, now)
     .run()
 
-  return switchTo(env, session, planId, url, owner.owner_id)
+  return switchTo(env, session, planId, url, mount, owner.owner_id)
 }
 
 /**
@@ -486,6 +517,7 @@ async function switchTo(
   session: Session,
   planId: string,
   url: URL,
+  mount: string,
   knownOwnerId?: string,
 ): Promise<Response> {
   if (session.role !== 'owner') return fail('Only the plan owner can switch playlists.', 403)
@@ -520,7 +552,7 @@ async function switchTo(
 
   return json(
     { planId, name: target.name },
-    { headers: { 'Set-Cookie': setCookie(SESSION_COOKIE, sessionToken, SESSION_MAX_AGE, isSecure(url)) } },
+    { headers: { 'Set-Cookie': setCookie(SESSION_COOKIE, sessionToken, SESSION_MAX_AGE, isSecure(url), mount) } },
   )
 }
 
@@ -528,20 +560,31 @@ async function switchTo(
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url)
+    const mount = mountPath(env)
+
+    // Everything below is written as if the app owned the origin. When it is
+    // mounted at a subpath, drop the prefix here — once — rather than
+    // threading it through every route comparison.
+    const url = stripMount(new URL(request.url), mount)
     const path = url.pathname
 
     if (!path.startsWith('/api/')) {
-      return env.ASSETS.fetch(request)
+      // The asset store is keyed by path *relative to dist/* — the mount
+      // prefix is not part of the key even though Vite baked it into the
+      // asset URLs. Serving the request unchanged makes
+      // /playlist-builder/assets/x.js miss and fall through to the SPA
+      // fallback, which returns index.html as text/html and leaves the app
+      // blank. Ask for the stripped path instead.
+      return env.ASSETS.fetch(new Request(url.toString(), request))
     }
 
     // --- unauthenticated -------------------------------------------
-    if (path === '/api/auth/login') return authLogin(env, url)
-    if (path === '/api/auth/callback') return authCallback(request, env, url)
+    if (path === '/api/auth/login') return authLogin(env, url, mount)
+    if (path === '/api/auth/callback') return authCallback(request, env, url, mount)
 
     const joinMatch = path.match(/^\/api\/join\/([A-Za-z0-9]+)$/)
     if (joinMatch && request.method === 'POST') {
-      return join(request, env, url, joinMatch[1])
+      return join(request, env, url, joinMatch[1], mount)
     }
 
     // --- everything below needs a session ---------------------------
@@ -571,12 +614,12 @@ export default {
 
     if (path === '/api/plans') {
       if (request.method === 'GET') return listPlans(env, session)
-      if (request.method === 'POST') return createPlan(request, env, session, url)
+      if (request.method === 'POST') return createPlan(request, env, session, url, mount)
     }
 
     const switchMatch = path.match(/^\/api\/plans\/([A-Za-z0-9_]+)\/open$/)
     if (switchMatch && request.method === 'POST') {
-      return switchTo(env, session, switchMatch[1], url)
+      return switchTo(env, session, switchMatch[1], url, mount)
     }
 
     if (path === '/api/links') {
@@ -601,7 +644,9 @@ export default {
       // never from the query string the client sent.
       const id = env.PLAN_ROOM.idFromName(session.planId)
       const room = env.PLAN_ROOM.get(id)
-      const forward = new URL(request.url)
+      // Built from the stripped URL so the room sees `/api/socket`
+      // regardless of where the app is mounted.
+      const forward = new URL(url.toString())
       forward.searchParams.set('plan', session.planId)
       forward.searchParams.set('cid', session.collaboratorId)
       forward.searchParams.set('name', session.displayName)

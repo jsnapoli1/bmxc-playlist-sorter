@@ -69,5 +69,72 @@
 
   "observability": {
     "enabled": true
+  },
+
+  // --- bmxc.camp/playlist-builder ------------------------------------
+  //
+  // A second deploy of this same Worker, mounted under a path on the
+  // marketing site's zone. The top-level config above stays exactly as it
+  // was, so the workers.dev URL keeps working unchanged and can be compared
+  // against this one.
+  //
+  // `routes` here (not `custom_domain`) because bmxc.camp already has a
+  // custom domain pointing at the `bmxcsite` Worker. A path route is more
+  // specific than that domain, so these two patterns win for
+  // /playlist-builder while every other path still reaches the marketing
+  // site. Note that a Worker on a route runs *in front of* the custom-domain
+  // Worker rather than replacing it, so this Worker must answer everything
+  // under its prefix and never fall through with a bare fetch(request).
+  "env": {
+    "camp": {
+      "name": "bmxc-playlist-sorter-camp",
+
+      // The path route is the only public URL for this deploy.
+      "workers_dev": false,
+      "preview_urls": false,
+
+      "routes": [
+        { "pattern": "bmxc.camp/playlist-builder", "zone_name": "bmxc.camp" },
+        { "pattern": "bmxc.camp/playlist-builder/*", "zone_name": "bmxc.camp" }
+      ],
+
+      "vars": {
+        "SPOTIFY_CLIENT_ID": "ea33a7d4234f499bb3d33d9797e8cc54",
+
+        // Must match the `base` the SPA in dist/ was built with, which is
+        // why `npm run deploy:camp` sets both from one value.
+        "APP_BASE": "/playlist-builder"
+      },
+
+      // Inherited config is NOT merged into a named environment — each of
+      // these has to be restated or the deploy silently loses the binding.
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "bmxc-playlist-sorter",
+          "database_id": "ea340ca4-6710-4cdb-ac8a-b7f6756b4a80",
+          "migrations_dir": "migrations"
+        }
+      ],
+
+      "durable_objects": {
+        "bindings": [{ "name": "PLAN_ROOM", "class_name": "PlanRoom" }]
+      },
+
+      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PlanRoom"] }],
+
+      "assets": {
+        "directory": "./dist",
+        "binding": "ASSETS",
+        "not_found_handling": "single-page-application",
+
+        // Everything under the mount goes to the Worker first so it can
+        // strip the prefix before asking the asset store, which keys assets
+        // by their path relative to dist/ with no prefix.
+        "run_worker_first": ["/playlist-builder", "/playlist-builder/*"]
+      },
+
+      "observability": { "enabled": true }
+    }
   }
 }

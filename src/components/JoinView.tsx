@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { appUrl, BASE } from '../lib/basePath.ts'
 
 /**
  * What someone sees when they open an invite link. They pick a name and are
@@ -15,7 +16,7 @@ export default function JoinView({ token, onJoined }: { token: string; onJoined:
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch(`/api/join/${token}`, {
+      const res = await fetch(appUrl(`api/join/${token}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim() }),
@@ -23,7 +24,7 @@ export default function JoinView({ token, onJoined }: { token: string; onJoined:
       const data = (await res.json()) as { error?: string }
       if (!res.ok) throw new Error(data.error ?? 'That invite link did not work.')
       // Drop the token from the address bar so it is not left in history.
-      window.history.replaceState({}, '', '/')
+      window.history.replaceState({}, '', BASE)
       onJoined()
     } catch (err) {
       setError((err as Error).message)

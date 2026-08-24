@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Role } from '../lib/protocol.ts'
+import { appUrl } from '../lib/basePath.ts'
 
 type Link = { token: string; role: Role }
 type Collaborator = { id: string; display_name: string; role: Role; last_seen_at: number }
@@ -14,7 +15,7 @@ type SessionInfo = {
 }
 
 function linkUrl(token: string): string {
-  return `${window.location.origin}/join/${token}`
+  return `${window.location.origin}${appUrl(`join/${token}`)}`
 }
 
 function relativeTime(ms: number): string {
@@ -93,7 +94,7 @@ export default function SharePanel({ session }: { session: SessionInfo }) {
   const load = useCallback(async () => {
     if (!isOwner) return
     try {
-      const res = await fetch('/api/links')
+      const res = await fetch(appUrl('api/links'))
       const data = (await res.json()) as {
         links?: Link[]
         collaborators?: Collaborator[]
@@ -115,7 +116,7 @@ export default function SharePanel({ session }: { session: SessionInfo }) {
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch('/api/links', {
+      const res = await fetch(appUrl('api/links'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role }),
@@ -135,7 +136,7 @@ export default function SharePanel({ session }: { session: SessionInfo }) {
   const remove = async (id: string) => {
     setBusy(true)
     try {
-      await fetch(`/api/collaborators/${id}`, { method: 'DELETE' })
+      await fetch(appUrl(`api/collaborators/${id}`), { method: 'DELETE' })
       await load()
     } finally {
       setBusy(false)
@@ -150,7 +151,7 @@ export default function SharePanel({ session }: { session: SessionInfo }) {
       // Accept a full Spotify URL as well as a bare id — pasting the link
       // straight from the app is the obvious thing to do.
       const id = playlistId.trim().match(/playlist[/:]([A-Za-z0-9]+)/)?.[1] ?? playlistId.trim()
-      const res = await fetch('/api/playlist', {
+      const res = await fetch(appUrl('api/playlist'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ playlistId: id || null }),

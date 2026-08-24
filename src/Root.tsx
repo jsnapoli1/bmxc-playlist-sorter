@@ -6,6 +6,7 @@ import { useSharedPlan } from './lib/useSharedPlan.ts'
 import { PreviewPlayerProvider } from './lib/usePreviewPlayer.tsx'
 import type { Role } from './lib/protocol.ts'
 import { takeAuthError, type AuthError } from './lib/authError.ts'
+import { appPathname, appUrl } from './lib/basePath.ts'
 
 export type SessionInfo = {
   collaboratorId: string
@@ -16,9 +17,9 @@ export type SessionInfo = {
   spotifyPlaylistId: string | null
 }
 
-/** `/join/<token>` — the invite-link route. */
+/** `/join/<token>` — the invite-link route, relative to wherever the app is mounted. */
 function joinTokenFromUrl(): string | null {
-  const match = window.location.pathname.match(/^\/join\/([A-Za-z0-9]+)\/?$/)
+  const match = appPathname(window.location.pathname).match(/^\/join\/([A-Za-z0-9]+)\/?$/)
   return match?.[1] ?? null
 }
 
@@ -72,7 +73,7 @@ export default function Root() {
 
   const loadSession = useCallback(async () => {
     try {
-      const res = await fetch('/api/session')
+      const res = await fetch(appUrl('api/session'))
       const data = res.ok ? ((await res.json()) as SessionInfo | { session: null }) : null
       // The endpoint answers `{session: null}` when nobody is signed in.
       setSession(data && 'planId' in data ? data : null)

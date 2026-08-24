@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { appUrl } from '../lib/basePath.ts'
 import { useStore } from '../lib/store.tsx'
 import { useSpotify } from '../spotify/SpotifyProvider.tsx'
 import { getPlaylist, getPlaylistTracks, type SpotifyPlaylist } from '../spotify/api.ts'
@@ -89,7 +90,7 @@ export default function SpotifyImportModal({
       const setSyncTarget = async () => {
         if (!isShared) return
         try {
-          const res = await fetch('/api/playlist', {
+          const res = await fetch(appUrl('api/playlist'), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ playlistId: playlist.id }),
@@ -133,7 +134,7 @@ export default function SpotifyImportModal({
         // On a shared account a plan lives on the server, so ask it to
         // make one for this playlist and switch to it. The reload picks
         // up the new session; the songs import into it on the way.
-        const res = await fetch('/api/plans', {
+        const res = await fetch(appUrl('api/plans'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: playlist.name, spotifyPlaylistId: playlist.id }),

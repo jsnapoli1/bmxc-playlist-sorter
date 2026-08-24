@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { appUrl } from '../lib/basePath.ts'
 
 type PlanRow = {
   id: string
@@ -32,7 +33,7 @@ export default function SharedPlanPicker({
   const load = useCallback(async () => {
     if (!canManage) return
     try {
-      const res = await fetch('/api/plans')
+      const res = await fetch(appUrl('api/plans'))
       if (!res.ok) return
       const data = (await res.json()) as { plans: PlanRow[] }
       setPlans(data.plans)
@@ -58,7 +59,7 @@ export default function SharedPlanPicker({
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch(`/api/plans/${planId}/open`, { method: 'POST' })
+      const res = await fetch(appUrl(`api/plans/${planId}/open`), { method: 'POST' })
       if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? 'Could not open that playlist.')
       // The session cookie changed, so reload rather than trying to
       // re-point the live socket at a different plan.
@@ -75,7 +76,7 @@ export default function SharedPlanPicker({
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch('/api/plans', {
+      const res = await fetch(appUrl('api/plans'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim() || 'New playlist' }),

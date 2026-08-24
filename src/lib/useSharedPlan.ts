@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Plan } from './types.ts'
 import type { ClientMessage, Op, Presence, ServerMessage, SyncState } from './protocol.ts'
 import { applyOps } from './applyOp.ts'
+import { appUrl } from './basePath.ts'
 
 export type ConnectionState = 'connecting' | 'online' | 'offline' | 'denied'
 
@@ -97,7 +98,7 @@ export function useSharedPlan(enabled: boolean): SharedPlan {
       if (closedRef.current) return
       setConnection((c) => (c === 'online' ? 'connecting' : c))
 
-      const url = new URL('/api/socket', window.location.href)
+      const url = new URL(appUrl('api/socket'), window.location.href)
       url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
       socket = new WebSocket(url.toString())
       socketRef.current = socket

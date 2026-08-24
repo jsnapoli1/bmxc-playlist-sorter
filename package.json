@@ -15,6 +15,8 @@
     "db:local": "wrangler d1 execute bmxc-playlist-sorter --local --file=migrations/0001_init.sql",
     "db:migrate": "wrangler d1 migrations apply bmxc-playlist-sorter --remote",
     "deploy": "npm run build && wrangler deploy",
+    "build:camp": "APP_BASE=/playlist-builder/ npm run build",
+    "deploy:camp": "npm run build:camp && wrangler deploy --env camp",
     "cf:whoami": "wrangler whoami"
   },
   "dependencies": {
