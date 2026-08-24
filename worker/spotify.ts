@@ -216,19 +216,35 @@ export class OwnerSpotify {
     return this.call('/me')
   }
 
+  /**
+   * Playlist metadata. No `fields` filter: the February 2026 API reshaped
+   * these responses, and a filter that no longer matches yields blanks
+   * rather than an error — which is how an empty read went unnoticed.
+   */
   async playlist(id: string): Promise<{ id: string; name: string; owner: { id: string }; snapshot_id: string }> {
-    return this.call(`/playlists/${id}?fields=id,name,owner(id),snapshot_id`)
+    return this.call(`/playlists/${id}`)
   }
 
-  /** Every track uri in a playlist, in order. */
+  /**
+   * Every track uri in a playlist, in order.
+   *
+   * Spotify's February 2026 API renamed each entry's `track` key to `item`,
+   * so a `fields=items(track(uri))` filter matches nothing and the playlist
+   * reads as empty — which made every sync a no-op that still reported
+   * success. Accept both shapes and do not filter, exactly as the browser
+   * client does.
+   */
   async playlistTrackUris(id: string): Promise<string[]> {
     const uris: string[] = []
-    let url: string | null = `${API}/playlists/${id}/items?fields=items(track(uri)),next&limit=100`
+    let url: string | null = `${API}/playlists/${id}/items?limit=100`
     while (url) {
-      const page: { items: { track: { uri: string } | null }[]; next: string | null } =
-        await this.call(url)
-      for (const item of page.items) {
-        if (item.track?.uri) uris.push(item.track.uri)
+      const page: {
+        items: { item?: { uri?: string } | null; track?: { uri?: string } | null }[]
+        next: string | null
+      } = await this.call(url)
+      for (const entry of page.items ?? []) {
+        const uri = entry?.item?.uri ?? entry?.track?.uri
+        if (uri) uris.push(uri)
       }
       url = page.next
     }

@@ -326,6 +326,18 @@ export class PlanRoom implements DurableObject {
         .map((t) => t.uri)
         .filter(Boolean)
 
+      // Reading back an empty playlist when the plan has songs means the
+      // read failed, not that the playlist is empty. Pushing zero moves
+      // and reporting success is how a broken read hid for so long.
+      if (current.length === 0 && target.length > 0) {
+        throw new SpotifyError(
+          'Spotify returned no songs for this playlist, so the order could not be compared. ' +
+            'If the playlist does have songs, the app could not read them.',
+          502,
+          false,
+        )
+      }
+
       const moves = reorderMoves(current, target)
       const absent = missingFromSpotify(current, target)
       console.log(
