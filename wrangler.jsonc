@@ -86,8 +86,10 @@
   // Worker rather than replacing it, so this Worker must answer everything
   // under its prefix and never fall through with a bare fetch(request).
   "env": {
-    "camp": {
-      "name": "bmxc-playlist-sorter-camp",
+    "playlist": {
+      // Named for the public URL it serves, rather than letting wrangler
+      // derive <name>-<env> from the environment key.
+      "name": "bmxc-playlist-builder",
 
       // The path route is the only public URL for this deploy.
       "workers_dev": false,
@@ -102,7 +104,7 @@
         "SPOTIFY_CLIENT_ID": "ea33a7d4234f499bb3d33d9797e8cc54",
 
         // Must match the `base` the SPA in dist/ was built with, which is
-        // why `npm run deploy:camp` sets both from one value.
+        // why `npm run deploy:playlist` sets both from one value.
         "APP_BASE": "/playlist-builder"
       },
 
