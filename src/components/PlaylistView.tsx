@@ -12,6 +12,7 @@ import {
 } from '../lib/playlistOrder.ts'
 import { isOrderDrag, readOrderDrag, setOrderDrag } from '../lib/dnd.ts'
 import { useDragScroll } from '../lib/useDragScroll.ts'
+import { useTouchDrag } from '../lib/useTouchDrag.ts'
 import PreviewButton from './PreviewButton.tsx'
 
 type Props = {
@@ -161,6 +162,7 @@ function SectionHeader({
 
 function PlaylistTrack({
   track,
+  sectionId,
   position,
   selected,
   dimmed,
@@ -168,8 +170,10 @@ function PlaylistTrack({
   onPointerDown,
   onDragStart,
   onDragEnd,
+  onTouchStart,
 }: {
   track: Track
+  sectionId: string
   position: number
   selected: boolean
   dimmed: boolean
@@ -177,6 +181,7 @@ function PlaylistTrack({
   onPointerDown: (e: React.MouseEvent) => void
   onDragStart: (e: React.DragEvent) => void
   onDragEnd: () => void
+  onTouchStart: (e: React.TouchEvent) => void
 }) {
   return (
     <div
@@ -187,9 +192,12 @@ function PlaylistTrack({
         showDropLine ? ' drop-before' : '',
       ].join('')}
       draggable
+      data-track-id={track.id}
+      data-row-section={sectionId}
       onMouseDown={onPointerDown}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      onTouchStart={onTouchStart}
       aria-selected={selected}
     >
       <span className="pl-grip" aria-hidden="true">
@@ -235,6 +243,29 @@ export default function PlaylistView({ onOpenImport }: Props) {
   // Anchor for shift-click ranges.
   const lastClicked = useRef<string | null>(null)
   const dragScroll = useDragScroll()
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+
+  /**
+   * Touch dragging. HTML5 drag events never fire on a touchscreen, so
+   * without this the playlist cannot be sorted on a phone at all.
+   */
+  const touch = useTouchDrag({
+    scrollRef,
+    resolve: (el) => ({
+      trackId: el.getAttribute('data-track-id') ?? undefined,
+      sectionId: el.getAttribute('data-row-section') ?? undefined,
+    }),
+    selectionFor: (id) => (selected.has(id) && selected.size > 0 ? [...selected] : [id]),
+    firstInSection: (sectionId, excluding) => firstIdOfSection(plan, sectionId, excluding),
+    nextAfter: (id) => visibleIds[visibleIds.indexOf(id) + 1] ?? null,
+    onDrop: (trackIds, to) =>
+      dispatch({
+        type: 'moveTracks',
+        trackIds,
+        beforeId: to.beforeId,
+        sectionId: to.sectionId,
+      }),
+  })
 
   const rows = useMemo(() => playlistRows(plan), [plan])
   const sections = plan.sections ?? []
@@ -385,14 +416,22 @@ export default function PlaylistView({ onOpenImport }: Props) {
               </button>
             </>
           ) : (
-            'Drag songs to reorder. Shift-click or ⌘-click to move several at once.'
+            <span>
+              <span className="only-desktop">
+                Drag songs to reorder. Shift-click or ⌘-click to move several at once.
+              </span>
+              <span className="only-mobile">Press and hold a song to move it.</span>
+            </span>
           )}
         </div>
       </div>
 
       <div
         className="scroll pl-scroll"
-        ref={dragScroll.ref}
+        ref={(node) => {
+          scrollRef.current = node
+          dragScroll.ref(node)
+        }}
         onDragOver={(e) => {
           if (!isOrderDrag(e)) return
           e.preventDefault()
@@ -408,6 +447,7 @@ export default function PlaylistView({ onOpenImport }: Props) {
             return (
               <div
                 key={`h_${id}`}
+                data-section-id={id}
                 onDragOver={(e) => overHeader(e, id)}
                 onDrop={drop}
               >
@@ -415,7 +455,10 @@ export default function PlaylistView({ onOpenImport }: Props) {
                   section={row.section}
                   count={row.count}
                   durationMs={row.durationMs}
-                  isDropTarget={target?.sectionId === id && target.beforeId === null}
+                  isDropTarget={
+                    (target?.sectionId === id && target.beforeId === null) ||
+                    touch.state.overSection === id
+                  }
                   onRename={(name) => dispatch({ type: 'updateSection', id, patch: { name } })}
                   onRecolor={(color) => dispatch({ type: 'updateSection', id, patch: { color } })}
                   onDelete={() => dispatch({ type: 'deleteSection', id })}
@@ -447,13 +490,18 @@ export default function PlaylistView({ onOpenImport }: Props) {
             >
               <PlaylistTrack
                 track={track}
+                sectionId={sectionId}
                 position={index + 1}
                 selected={selected.has(track.id)}
-                dimmed={dragging.has(track.id)}
-                showDropLine={target?.beforeId === track.id}
+                dimmed={dragging.has(track.id) || touch.state.dragging.includes(track.id)}
+                showDropLine={
+                  target?.beforeId === track.id ||
+                  (touch.state.over?.id === track.id && !touch.state.over.below)
+                }
                 onPointerDown={(e) => select(track.id, e)}
                 onDragStart={(e) => beginDrag(e, track.id)}
                 onDragEnd={endDrag}
+                onTouchStart={(e) => touch.onTouchStart(e, track.id)}
               />
             </div>
           )

@@ -978,3 +978,126 @@ code.inline {
 @media (prefers-reduced-motion: reduce) {
   .preview-ring { display: none; }
 }
+
+/* ---------- Mobile ---------- */
+
+.only-mobile { display: none; }
+.only-desktop { display: inline; }
+
+@media (max-width: 980px) {
+  .only-mobile { display: inline; }
+  .only-desktop { display: none; }
+
+  /* One compact row: playlist picker and Spotify state, nothing else. */
+  .topbar {
+    padding: 6px 10px;
+    gap: 8px;
+    flex-wrap: nowrap;
+    min-height: 52px;
+  }
+  /* The wordmark costs a whole row's worth of width; the mark is enough. */
+  .brand-text { display: none; }
+
+  /* Tabs live in the bottom bar instead. */
+  .app { padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
+
+  /* Touch targets: 44px is the usual floor, and these were 32. */
+  .btn,
+  .topbar select,
+  .topbar .btn {
+    min-height: 44px;
+  }
+  .btn.sm { min-height: 40px; padding: 8px 12px; }
+  .btn.ghost.icon,
+  .btn.sm.ghost { min-width: 40px; min-height: 40px; }
+
+  input,
+  select,
+  textarea {
+    min-height: 44px;
+    /* Under 16px iOS zooms the page on focus, which is jarring mid-edit. */
+    font-size: 16px;
+  }
+
+  .pl-header-actions .btn { min-width: 40px; min-height: 40px; }
+
+  /* The section name doubles as the rename button, so it needs a real
+     target rather than the height of its text. */
+  .pl-title,
+  .pl-rename {
+    min-height: 40px;
+    padding: 0 4px;
+    font-size: 13px;
+  }
+  .pl-header { padding: 8px 12px; }
+  .preview-btn { width: 40px; height: 40px; font-size: 12px; }
+  .pl-track { padding: 10px 12px; }
+  .track { padding: 10px 12px; }
+}
+
+/* Bottom tab bar ------------------------------------------------------ */
+
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border);
+  /* Clear the home indicator on iOS. */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.tabbar-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 4px;
+  min-height: 56px;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.tabbar-btn[aria-selected='true'] { color: var(--accent); }
+.tabbar-glyph { font-size: 17px; line-height: 1; }
+.tabbar-label { white-space: nowrap; }
+
+/* Long-press dragging -------------------------------------------------- */
+
+/* A row being dragged by finger. */
+.pl-track.touch-dragging {
+  opacity: 0.35;
+}
+
+@media (max-width: 980px) {
+  /* The grip is a mouse affordance; a long press is the touch gesture. */
+  .pl-grip { display: none; }
+
+  /* Stops the browser turning a long press into a text selection or
+     callout, which would fight the drag. */
+  .pl-track {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
+@media (max-width: 980px) {
+  /* "MASTER PLAYLIST" + count wrapped onto two lines and pushed the
+     songs down; the tab bar already says which view this is. */
+  .pl-head .panel-title > span:first-child { display: none; }
+  .pl-head { padding: 8px 10px; gap: 6px; }
+  .panel-head { gap: 6px; }
+
+  /* The Plan tab's own toolbar sits under a header that is already tight. */
+  .board-toolbar { padding: 6px 10px; }
+}

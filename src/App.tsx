@@ -105,6 +105,7 @@ function Shell({ session, shared, authError }: ShellProps) {
           </select>
         )}
 
+        {!isMobile && (
         <nav className="tabs" role="tablist">
           {(
             [
@@ -125,13 +126,15 @@ function Shell({ session, shared, authError }: ShellProps) {
             </button>
           ))}
         </nav>
+        )}
 
         <div className="spacer" />
 
-        <span className="pill" title="Songs placed into the schedule">
-          ♪ {placed}
-          {!isMobile && ' placed'}
-        </span>
+        {!isMobile && (
+          <span className="pill" title="Songs placed into the schedule">
+            ♪ {placed} placed
+          </span>
+        )}
 
         {tab === 'plan' && !isMobile && (
           <>
@@ -267,7 +270,33 @@ function Shell({ session, shared, authError }: ShellProps) {
         </div>
       )}
 
-      <DuckPal placed={placed} />
+      {!isMobile && <DuckPal placed={placed} />}
+
+      {isMobile && (
+        <nav className="tabbar" role="tablist" aria-label="Sections">
+          {(
+            [
+              ['plan', 'Plan', '▦'],
+              ['playlist', 'Playlist', '♪'],
+              ['run', 'Run sheet', '☰'],
+              ['settings', 'Settings', '⚙'],
+            ] as [Tab, string, string][]
+          ).map(([id, label, glyph]) => (
+            <button
+              key={id}
+              className="tabbar-btn"
+              role="tab"
+              aria-selected={tab === id}
+              onClick={() => setTab(id)}
+            >
+              <span className="tabbar-glyph" aria-hidden="true">
+                {glyph}
+              </span>
+              <span className="tabbar-label">{label}</span>
+            </button>
+          ))}
+        </nav>
+      )}
 
       {scheduleModal && <ImportScheduleModal onClose={() => setScheduleModal(false)} />}
       {songsModal && (
