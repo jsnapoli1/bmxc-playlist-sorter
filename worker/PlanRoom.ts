@@ -17,7 +17,7 @@ import { canEdit, MAX_OPS_PER_MESSAGE } from '../src/lib/protocol.ts'
 import { applyOps } from '../src/lib/applyOp.ts'
 import { displayOrderedTracks } from '../src/lib/playlistOrder.ts'
 import { missingFromSpotify, reorderMoves } from '../src/lib/spotifyDiff.ts'
-import { OwnerSpotify, SpotifyError, sealRefreshToken } from './spotify.ts'
+import { OwnerSpotify, RateLimited, SpotifyError, sealRefreshToken } from './spotify.ts'
 import type { Env } from './env.ts'
 
 /** Wait for edits to settle before pushing to Spotify. */
@@ -31,6 +31,12 @@ const MAX_SYNC_FAILURES = 3
  * open, so a song added in the Spotify app shows up on its own.
  */
 const POLL_MS = 15_000
+/**
+ * Pause between reorder calls. A long reorder is one request per moved song,
+ * and firing them back to back is what walks into Spotify's rolling-window
+ * limit; a short gap keeps a big change inside it.
+ */
+const REORDER_GAP_MS = 250
 
 type Session = {
   socket: WebSocket
@@ -318,6 +324,15 @@ export class PlanRoom implements DurableObject {
     }
   }
 
+  /** Stop polling for a while, then resume the normal interval. */
+  private pausePollingFor(ms: number): void {
+    this.stopPolling()
+    setTimeout(() => {
+      // Only resume if someone is still watching.
+      if (this.sessions.size > 0) this.startPolling()
+    }, ms)
+  }
+
   /**
    * Re-read the playlist and fold in anything that changed on Spotify's
    * side — songs added or removed in the Spotify app.
@@ -365,8 +380,15 @@ export class PlanRoom implements DurableObject {
         `poll: plan=${this.planId} added=${added} removed=${removed} total=${tracks.length}`,
       )
     } catch (err) {
-      // A failed poll is not worth surfacing: the plan is unaffected and
-      // the next tick retries.
+      // A rate-limited poll must stop polling, or the 15s tick keeps the
+      // limit alive and starves the sync that actually matters.
+      if (err instanceof RateLimited) {
+        console.log(`poll rate limited: plan=${this.planId} retryAfter=${err.retryAfterS}s`)
+        this.pausePollingFor(Math.max(1, err.retryAfterS) * 1000)
+        return
+      }
+      // Any other failed poll is not worth surfacing: the plan is unaffected
+      // and the next tick retries.
       console.log(`poll failed: plan=${this.planId} ${(err as Error).message}`)
     } finally {
       this.polling = false
@@ -405,6 +427,8 @@ export class PlanRoom implements DurableObject {
   private async runSync(): Promise<void> {
     if (!this.plan || !this.spotifyPlaylistId) return
     this.syncRunning = true
+    // Set by the rate-limit branch below to the wait Spotify asked for.
+    let rateLimitedUntil = 0
     this.setSync({ status: 'syncing', error: null })
     console.log(`sync start: plan=${this.planId} playlist=${this.spotifyPlaylistId}`)
 
@@ -445,7 +469,8 @@ export class PlanRoom implements DurableObject {
       )
 
       let snapshot = meta.snapshot_id
-      for (const move of moves) {
+      for (const [i, move] of moves.entries()) {
+        if (i > 0) await new Promise((r) => setTimeout(r, REORDER_GAP_MS))
         const result = await spotify.reorder(playlistId, move, snapshot)
         // Chain snapshots so a concurrent edit in the Spotify app is caught
         // rather than silently overwritten.
@@ -465,6 +490,20 @@ export class PlanRoom implements DurableObject {
         playlistName: meta.name,
       })
     } catch (err) {
+      // Rate limiting is not a failure — it is Spotify telling us when to
+      // come back. Don't count it toward MAX_SYNC_FAILURES, don't pause;
+      // just wait out the window it gave us and pick up where we left off.
+      if (err instanceof RateLimited) {
+        const waitMs = Math.max(1, err.retryAfterS) * 1000
+        console.log(`sync rate limited: plan=${this.planId} retryAfter=${err.retryAfterS}s`)
+        this.setSync({ status: 'pending', error: err.message })
+        // Owns the retry itself, and says so, because `finally` below would
+        // otherwise reschedule on the normal debounce and walk straight back
+        // into the limit.
+        rateLimitedUntil = waitMs
+        return
+      }
+
       const error = err as SpotifyError
       this.syncFailures += 1
       console.log(
@@ -474,15 +513,32 @@ export class PlanRoom implements DurableObject {
       const permanent = error instanceof SpotifyError && error.permanent
       const exhausted = this.syncFailures >= MAX_SYNC_FAILURES
 
+      // Only an auth problem is actually fixed by reconnecting; saying so for
+      // every pause sent people to re-do a sign-in that was never broken.
+      const isAuth = error.status === 401 || error.status === 403
       this.setSync({
         status: permanent || exhausted ? 'paused' : 'idle',
         error:
           (error.message || 'Could not reach Spotify.') +
-          (permanent || exhausted ? ' Syncing is paused until you reconnect Spotify.' : ''),
+          (permanent || exhausted
+            ? isAuth
+              ? ' Syncing is paused — reconnect Spotify to resume.'
+              : ' Syncing is paused. Use “Try syncing again” once the problem is sorted.'
+            : ''),
       })
     } finally {
       this.syncRunning = false
-      if (this.syncQueued && this.sync.status !== 'paused') {
+      if (rateLimitedUntil > 0) {
+        // Come back when Spotify said to, keeping any queued edits pending
+        // so they go out with that run.
+        this.syncQueued = true
+        if (this.syncTimer !== null) clearTimeout(this.syncTimer)
+        this.syncTimer = setTimeout(() => {
+          this.syncTimer = null
+          this.syncQueued = false
+          void this.runSync()
+        }, rateLimitedUntil) as unknown as number
+      } else if (this.syncQueued && this.sync.status !== 'paused') {
         this.syncQueued = false
         this.scheduleSync()
       }

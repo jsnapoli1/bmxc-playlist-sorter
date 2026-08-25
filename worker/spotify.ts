@@ -34,6 +34,9 @@ export type SpotifyTrack = {
   sourceId: string
 }
 
+/** Longest 429 wait worth sitting through inside a single request. */
+const MAX_INLINE_RETRY_S = 5
+
 export class SpotifyError extends Error {
   constructor(
     message: string,
@@ -43,6 +46,26 @@ export class SpotifyError extends Error {
   ) {
     super(message)
     this.name = 'SpotifyError'
+  }
+}
+
+/**
+ * Spotify is rate limiting us. Never permanent — waiting is precisely the
+ * fix — and it carries how long to wait so the caller can reschedule rather
+ * than counting it as a failure.
+ */
+export class RateLimited extends SpotifyError {
+  constructor(readonly retryAfterS: number) {
+    super(
+      `Spotify is rate limiting this account. Syncing resumes automatically in about ${
+        retryAfterS < 60
+          ? `${Math.max(1, Math.round(retryAfterS))} seconds`
+          : `${Math.round(retryAfterS / 60)} minutes`
+      }.`,
+      429,
+      false,
+    )
+    this.name = 'RateLimited'
   }
 }
 
@@ -188,10 +211,17 @@ export class OwnerSpotify {
       },
     })
 
-    if (res.status === 429 && retry) {
-      const wait = Math.min(Number(res.headers.get('Retry-After') ?? 1), 10)
-      await new Promise((r) => setTimeout(r, wait * 1000))
-      return this.call<T>(path, init, false)
+    if (res.status === 429) {
+      // Spotify's Retry-After is authoritative and can be much longer than a
+      // few seconds once a limit is tripped. Waiting it out inline is only
+      // reasonable when it is short; anything longer belongs to the caller,
+      // which can reschedule instead of holding the request open.
+      const after = Number(res.headers.get('Retry-After') ?? 1)
+      if (retry && after <= MAX_INLINE_RETRY_S) {
+        await new Promise((r) => setTimeout(r, after * 1000))
+        return this.call<T>(path, init, false)
+      }
+      throw new RateLimited(after)
     }
     if (res.status === 401 && retry) {
       // Force a refresh and try once more.
@@ -218,7 +248,10 @@ export class OwnerSpotify {
       throw new SpotifyError(
         detail || `Spotify request failed (${res.status}) on ${where}`,
         res.status,
-        res.status >= 400 && res.status < 500,
+        // 4xx generally means retrying cannot help — except 429, where
+        // waiting is the entire fix. Treating it as permanent is what paused
+        // sync with "reconnect Spotify" advice that could not work.
+        res.status >= 400 && res.status < 500 && res.status !== 429,
       )
     }
     if (res.status === 204) return undefined as T
