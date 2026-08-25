@@ -7,6 +7,7 @@ import { planLabel, sourceOf } from '../lib/planMigration.ts'
 import type { AuthError } from '../lib/authError.ts'
 import SpotifySetup from './SpotifySetup.tsx'
 import SpotifyDiagnostics from './SpotifyDiagnostics.tsx'
+import SharedPlanList from './SharedPlanList.tsx'
 import ScopeNotice from './ScopeNotice.tsx'
 import { createPlaylistWithTracks } from '../spotify/api.ts'
 import { minutesOf } from '../lib/time.ts'
@@ -187,6 +188,8 @@ export default function SettingsView({
             )}
           </div>
         )}
+
+        {session?.role === 'owner' && <SharedPlanList activePlanId={session.planId} />}
 
         {!session && (
         <div className="card">

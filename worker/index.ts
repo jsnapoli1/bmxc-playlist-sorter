@@ -478,7 +478,76 @@ async function listPlans(env: Env, session: Session): Promise<Response> {
     .bind(owner.owner_id)
     .all<{ id: string; name: string; spotify_playlist_id: string | null; updated_at: number }>()
 
-  return json({ plans: rows.results ?? [], activePlanId: session.planId })
+  // How many people and links each plan has, so the delete confirm can say
+  // what deleting actually costs instead of asking twice.
+  const tallies = await env.DB.prepare(
+    `SELECT p.id AS id,
+            (SELECT COUNT(*) FROM collaborators c WHERE c.plan_id = p.id) AS people,
+            (SELECT COUNT(*) FROM share_links s WHERE s.plan_id = p.id) AS links
+       FROM plans p WHERE p.owner_id = ?`,
+  )
+    .bind(owner.owner_id)
+    .all<{ id: string; people: number; links: number }>()
+
+  const counts: Record<string, { people: number; links: number }> = {}
+  for (const row of tallies.results ?? []) {
+    counts[row.id] = { people: row.people, links: row.links }
+  }
+
+  return json({ plans: rows.results ?? [], activePlanId: session.planId, counts })
+}
+
+/**
+ * Delete one of the owner's plans.
+ *
+ * Collaborators and share links go with it through ON DELETE CASCADE, so
+ * everyone who joined this plan loses their session and the invite link
+ * stops working — which is why the UI states the count before asking.
+ */
+async function deletePlan(
+  env: Env,
+  session: Session,
+  planId: string,
+  url: URL,
+  mount: string,
+): Promise<Response> {
+  if (session.role !== 'owner') return fail('Only the plan owner can delete a playlist.', 403)
+
+  const owner = await env.DB.prepare('SELECT owner_id FROM plans WHERE id = ?')
+    .bind(session.planId)
+    .first<{ owner_id: string }>()
+  if (!owner) return fail('Plan not found.', 404)
+
+  const target = await env.DB.prepare('SELECT id, owner_id FROM plans WHERE id = ?')
+    .bind(planId)
+    .first<{ id: string; owner_id: string }>()
+  // Only ever delete a plan the same account owns.
+  if (!target || target.owner_id !== owner.owner_id) {
+    return fail('That playlist does not belong to this account.', 403)
+  }
+
+  const remaining = await env.DB.prepare(
+    'SELECT id FROM plans WHERE owner_id = ? AND id != ? ORDER BY created_at',
+  )
+    .bind(owner.owner_id, planId)
+    .first<{ id: string }>()
+  // Refuse to remove the last one: the owner would be left signed in with
+  // no plan to open and no way back except signing in again.
+  if (!remaining) {
+    return fail('This is your only playlist. Create another one before deleting this.', 400)
+  }
+
+  await env.DB.prepare('DELETE FROM plans WHERE id = ?').bind(planId).run()
+  console.log(`deletePlan: owner=${owner.owner_id} plan=${planId}`)
+
+  // Deleting the plan this session is bound to takes the session with it
+  // (the collaborator row cascades), so issue a new one for a plan that
+  // still exists rather than leaving the owner signed out.
+  if (planId === session.planId) {
+    return switchTo(env, { ...session, planId: remaining.id }, remaining.id, url, mount, owner.owner_id)
+  }
+
+  return json({ ok: true, deletedId: planId })
 }
 
 /** Start another plan for the same owner, and switch this session to it. */
@@ -631,6 +700,11 @@ export default {
     const switchMatch = path.match(/^\/api\/plans\/([A-Za-z0-9_]+)\/open$/)
     if (switchMatch && request.method === 'POST') {
       return switchTo(env, session, switchMatch[1], url, mount)
+    }
+
+    const deleteMatch = path.match(/^\/api\/plans\/([A-Za-z0-9_]+)$/)
+    if (deleteMatch && request.method === 'DELETE') {
+      return deletePlan(env, session, deleteMatch[1], url, mount)
     }
 
     if (path === '/api/links') {

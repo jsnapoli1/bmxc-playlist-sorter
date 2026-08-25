@@ -171,6 +171,7 @@ function PlaylistTrack({
   onDragStart,
   onDragEnd,
   onTouchStart,
+  onNote,
 }: {
   track: Track
   sectionId: string
@@ -182,6 +183,7 @@ function PlaylistTrack({
   onDragStart: (e: React.DragEvent) => void
   onDragEnd: () => void
   onTouchStart: (e: React.TouchEvent) => void
+  onNote: (notes: string) => void
 }) {
   return (
     <div
@@ -217,7 +219,24 @@ function PlaylistTrack({
           {track.album ? ` · ${track.album}` : ''}
           {track.explicit ? ' · E' : ''}
         </div>
+        {track.notes?.trim() && <div className="pl-note truncate">⊙ {track.notes}</div>}
       </div>
+      {/* A prompt rather than an inline field: this row is a drag handle with
+          mousedown-driven multi-select, and a focusable input inside it would
+          swallow those gestures. */}
+      <button
+        className={`btn ghost icon sm${track.notes?.trim() ? ' has-note' : ''}`}
+        title={track.notes?.trim() ? `Note: ${track.notes}` : 'Add a note about this song'}
+        aria-label={track.notes?.trim() ? 'Edit song note' : 'Add song note'}
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation()
+          const next = window.prompt(`Note for “${track.name}”`, track.notes ?? '')
+          if (next !== null) onNote(next)
+        }}
+      >
+        ✎
+      </button>
       <span className="tiny faint">{formatDuration(track.durationMs)}</span>
     </div>
   )
@@ -502,6 +521,7 @@ export default function PlaylistView({ onOpenImport }: Props) {
                 onDragStart={(e) => beginDrag(e, track.id)}
                 onDragEnd={endDrag}
                 onTouchStart={(e) => touch.onTouchStart(e, track.id)}
+                onNote={(notes) => dispatch({ type: 'setTrackNotes', trackId: track.id, notes })}
               />
             </div>
           )

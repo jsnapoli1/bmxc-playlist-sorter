@@ -1132,3 +1132,12 @@ code.inline {
   /* The Plan tab's own toolbar sits under a header that is already tight. */
   .board-toolbar { padding: 6px 10px; }
 }
+
+/* Song note on a playlist row. Truncated to one line so a long note cannot
+   grow the row and change the drag geometry. */
+.pl-note {
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--text-faint);
+  margin-top: 1px;
+}
