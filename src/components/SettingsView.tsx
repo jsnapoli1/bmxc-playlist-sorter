@@ -161,6 +161,34 @@ export default function SettingsView({
         </div>
         )}
 
+        {/* Renaming a shared plan is its own control. The list below reads
+            state.plans — the browser's own plans — and a shared plan is not
+            one of them: its copy lives on the server. Typing in that list
+            while shared renamed a local plan nobody was looking at, which is
+            why the rename appeared to do nothing. */}
+        {session && (
+          <div className="card">
+            <h3>Playlist name</h3>
+            <p className="tiny muted" style={{ marginTop: 4 }}>
+              Everyone editing “{planLabel(plan)}” sees this name.
+            </p>
+            <input
+              type="text"
+              value={plan.name}
+              placeholder={sourceOf(plan)?.name ?? 'Playlist name'}
+              onChange={(e) => dispatch({ type: 'renamePlan', id: plan.id, name: e.target.value })}
+              aria-label="Shared playlist name"
+              disabled={session.role === 'viewer'}
+            />
+            {session.role === 'viewer' && (
+              <p className="tiny faint" style={{ marginTop: 6 }}>
+                You have view-only access, so the name is not editable.
+              </p>
+            )}
+          </div>
+        )}
+
+        {!session && (
         <div className="card">
           <h3>Playlists</h3>
           <p className="tiny muted" style={{ marginTop: 4 }}>
@@ -226,6 +254,7 @@ export default function SettingsView({
             + New week
           </button>
         </div>
+        )}
 
         <div className="card">
           <h3>Your data</h3>
