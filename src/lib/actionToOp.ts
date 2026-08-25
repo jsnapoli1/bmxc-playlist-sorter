@@ -106,6 +106,8 @@ export function actionToOp(action: Action, uid: IdMaker): Op | null {
         entryId: action.entryId,
         note: action.note,
       }
+    case 'setTrackNotes':
+      return { type: 'setTrackNotes', trackId: action.trackId, notes: action.notes }
     case 'clearBlockEntries':
       return { type: 'clearBlockEntries', blockId: action.blockId }
 

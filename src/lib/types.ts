@@ -18,6 +18,15 @@ export type Track = {
    * changes because it was placed on a block.
    */
   sectionId?: string
+  /**
+   * A note about the song itself: "radio edit only", "great closer".
+   *
+   * Distinct from `Entry.note`, which is a cue for one placement on one
+   * block. This one travels with the song everywhere it appears, so it is
+   * the right place for something true of the song regardless of when it
+   * is played.
+   */
+  notes?: string
 }
 
 /**

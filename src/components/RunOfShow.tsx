@@ -44,6 +44,7 @@ export default function RunOfShow() {
         block.entries.forEach((entry, i) => {
           const track = plan.tracks[entry.trackId]
           lines.push(`    ${i + 1}. ${track ? `${track.name} — ${track.artists}` : 'Missing song'}${entry.note.trim() ? `  [${entry.note.trim()}]` : ''}`)
+          if (showNotes && track?.notes?.trim()) lines.push(`       (${track.notes.trim()})`)
         })
         lines.push('')
       }
@@ -144,6 +145,9 @@ export default function RunOfShow() {
                                 {track ? (
                                   <span className="faint tiny"> · {formatDuration(track.durationMs)}</span>
                                 ) : null}
+                                {showNotes && track?.notes?.trim() && (
+                                  <div className="cue">⊙ {track.notes}</div>
+                                )}
                                 {entry.note.trim() && <div className="cue">↳ {entry.note}</div>}
                               </span>
                             </li>

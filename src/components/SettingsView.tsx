@@ -170,9 +170,15 @@ export default function SettingsView({
           </p>
           {state.plans.map((p) => (
             <div className="row" key={p.id} style={{ marginBottom: 6 }}>
+              {/* Bound to p.name, not planLabel(p): the label prefers the
+                  imported Spotify playlist's name, so an input showing it
+                  would overwrite every keystroke with the Spotify name and
+                  the rename looked like it did nothing. The placeholder
+                  keeps that name visible when no override has been set. */}
               <input
                 type="text"
-                value={planLabel(p)}
+                value={p.name}
+                placeholder={sourceOf(p)?.name ?? 'Playlist name'}
                 onChange={(e) => dispatch({ type: 'renamePlan', id: p.id, name: e.target.value })}
                 aria-label="Playlist name"
               />

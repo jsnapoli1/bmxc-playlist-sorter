@@ -79,6 +79,7 @@ export type Action =
   | { type: 'moveEntry'; fromBlockId: string; entryId: string; toBlockId: string; toIndex: number }
   | { type: 'reorderEntry'; blockId: string; entryId: string; delta: number }
   | { type: 'setEntryNote'; blockId: string; entryId: string; note: string }
+  | { type: 'setTrackNotes'; trackId: string; notes: string }
   | { type: 'clearBlockEntries'; blockId: string }
   | { type: 'replaceState'; state: AppState }
 
@@ -422,6 +423,15 @@ function reducer(state: AppState, action: Action): AppState {
           entries: b.entries.map((e) => (e.id === action.entryId ? { ...e, note: action.note } : e)),
         })),
       )
+    case 'setTrackNotes':
+      return mapActive(state, (plan) => {
+        const track = plan.tracks[action.trackId]
+        if (!track) return plan
+        return {
+          ...plan,
+          tracks: { ...plan.tracks, [action.trackId]: { ...track, notes: action.notes } },
+        }
+      })
     case 'clearBlockEntries':
       return mapActive(state, (plan) => mapBlock(plan, action.blockId, (b) => ({ ...b, entries: [] })))
 

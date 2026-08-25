@@ -289,6 +289,14 @@ export default function BlockInspector({
                   ×
                 </button>
               </div>
+              {/* The song's own note, shown read-only here: it belongs to
+                  the song rather than this placement, so it is edited in the
+                  library where that scope is obvious. */}
+              {track?.notes?.trim() && (
+                <div className="track-note-echo" title="Note on this song, everywhere it appears">
+                  ⊙ {track.notes}
+                </div>
+              )}
               <textarea
                 className="entry-note"
                 rows={1}

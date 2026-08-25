@@ -114,7 +114,11 @@ export default function SpotifyImportModal({
         // empty one behind.
         dispatch({ type: 'addTracks', tracks })
         dispatch({ type: 'addSource', source })
-        dispatch({ type: 'renamePlan', id: plan.id, name: playlist.name })
+        // Deliberately not renaming the plan to the playlist's name: an
+        // empty name lets planLabel() show the source's current name, so a
+        // playlist renamed in Spotify follows along. The moment the user
+        // types their own name it wins instead.
+        dispatch({ type: 'renamePlan', id: plan.id, name: '' })
         await setSyncTarget()
         setDone(`Imported ${tracks.length} songs from “${playlist.name}”.`)
       } else if (playlist.id === current.id) {

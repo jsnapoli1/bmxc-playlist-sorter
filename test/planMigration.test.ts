@@ -313,3 +313,21 @@ test('a plan with no playlist falls back to its own name', () => {
   // Arrange / Act / Assert
   assert.equal(planLabel(plan({ name: 'Camp Week 1' })), 'Camp Week 1')
 })
+
+test('a name the user typed wins over the playlist name', () => {
+  // The rename bug: the settings input was bound to planLabel(), which
+  // preferred the source name, so every keystroke was overwritten and
+  // renaming appeared to do nothing.
+  const p = plan({ name: 'Week of 8/17', sources: [source('s1', 'BMXC27 Spotify')] })
+  assert.equal(planLabel(p), 'Week of 8/17')
+})
+
+test('with no name of its own a plan is labelled by its playlist', () => {
+  const p = plan({ name: '', sources: [source('s1', 'BMXC27 Spotify')] })
+  assert.equal(planLabel(p), 'BMXC27 Spotify')
+})
+
+test('a whitespace-only name does not count as a name', () => {
+  const p = plan({ name: '   ', sources: [source('s1', 'BMXC27 Spotify')] })
+  assert.equal(planLabel(p), 'BMXC27 Spotify')
+})

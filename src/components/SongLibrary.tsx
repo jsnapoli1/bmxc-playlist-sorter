@@ -18,16 +18,24 @@ function TrackRow({
   usedCount,
   onAdd,
   canAdd,
+  onNote,
 }: {
   track: Track
   usedCount: number
   onAdd: () => void
   canAdd: boolean
+  onNote: (notes: string) => void
 }) {
   const [dragging, setDragging] = useState(false)
+  // The note field stays hidden until there is a note or the user asks for
+  // one, so the library keeps reading as a dense, draggable list.
+  const [editingNote, setEditingNote] = useState(false)
+  const hasNote = Boolean(track.notes?.trim())
+  const showNote = hasNote || editingNote
   return (
+    <div className={`track-wrap${dragging ? ' dragging' : ''}`}>
     <div
-      className={`track${dragging ? ' dragging' : ''}`}
+      className="track"
       draggable
       onDragStart={(e) => {
         setTrackDrag(e, [track.id])
@@ -55,6 +63,15 @@ function TrackRow({
         </span>
       )}
       <button
+        className={`btn ghost icon sm${hasNote ? ' has-note' : ''}`}
+        onClick={() => setEditingNote((v) => !v)}
+        title={hasNote ? `Note: ${track.notes}` : 'Add a note about this song'}
+        aria-label={hasNote ? 'Edit song note' : 'Add song note'}
+        aria-expanded={showNote}
+      >
+        ✎
+      </button>
+      <button
         className="btn sm"
         onClick={onAdd}
         disabled={!canAdd}
@@ -62,6 +79,18 @@ function TrackRow({
       >
         +
       </button>
+    </div>
+    {showNote && (
+      <textarea
+        className="track-note"
+        rows={1}
+        autoFocus={editingNote && !hasNote}
+        value={track.notes ?? ''}
+        placeholder="Note about this song — “radio edit only”, “great closer”…"
+        onChange={(e) => onNote(e.target.value)}
+        onBlur={() => setEditingNote(false)}
+      />
+    )}
     </div>
   )
 }
@@ -177,6 +206,7 @@ export default function SongLibrary({ selectedBlockId, selectedBlockLabel, onOpe
               selectedBlockId &&
               dispatch({ type: 'assign', blockId: selectedBlockId, trackIds: [track.id] })
             }
+            onNote={(notes) => dispatch({ type: 'setTrackNotes', trackId: track.id, notes })}
           />
         ))}
       </div>

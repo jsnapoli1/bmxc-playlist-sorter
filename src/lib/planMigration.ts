@@ -19,7 +19,17 @@ export function sourceOf(plan: Plan): SourcePlaylist | null {
 }
 
 /** A plan's display name: the playlist's, falling back to the plan's own. */
+/**
+ * What to call a plan on screen.
+ *
+ * A name the user typed wins. Otherwise fall back to the imported Spotify
+ * playlist's name, which is a better default than the placeholder a plan is
+ * created with — but only as a fallback, or renaming a plan would appear to
+ * do nothing everywhere the label is shown.
+ */
 export function planLabel(plan: Plan): string {
+  const own = plan.name?.trim()
+  if (own) return own
   return sourceOf(plan)?.name ?? plan.name
 }
 
@@ -63,6 +73,11 @@ export function splitBySource(plan: Plan, uid: IdMaker): Plan[] {
   const firstTracks = { ...tracksFor(first.id), ...tracksFor(null) }
   const head: Plan = {
     ...plan,
+    // Cleared so this plan is labelled by its playlist like the split-off
+    // ones are. Before plans held a single playlist, the name here was a
+    // generic placeholder covering several; keeping it would now win over
+    // the playlist name, since a name the user typed takes precedence.
+    name: '',
     sources: [first],
     tracks: firstTracks,
     trackOrder: orderFor(firstTracks),
@@ -73,7 +88,9 @@ export function splitBySource(plan: Plan, uid: IdMaker): Plan[] {
     return {
       version: 1,
       id: uid('plan'),
-      name: source.name,
+      // Empty rather than source.name, so the label follows the playlist if
+      // it is renamed in Spotify. See planLabel().
+      name: '',
       // A schedule belongs to the plan that owned it; a split-off playlist
       // starts with an empty week rather than a copy someone has to prune.
       days: [],

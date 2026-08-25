@@ -254,6 +254,16 @@ export function applyOp(plan: Plan, op: Op): Plan {
         ...b,
         entries: b.entries.map((e) => (e.id === op.entryId ? { ...e, note: op.note } : e)),
       }))
+    case 'setTrackNotes': {
+      const track = plan.tracks[op.trackId]
+      // A note for a song that is no longer in the library is dropped
+      // rather than resurrecting the song as a bare id.
+      if (!track) return plan
+      return {
+        ...plan,
+        tracks: { ...plan.tracks, [op.trackId]: { ...track, notes: op.notes } },
+      }
+    }
     case 'clearBlockEntries':
       return mapBlock(plan, op.blockId, (b) => ({ ...b, entries: [] }))
 

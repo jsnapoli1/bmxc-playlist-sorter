@@ -135,14 +135,19 @@
   background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.45), transparent 70%);
 }
 
-/* ---- happy: the rub ----------------------------------------------------
+/* ---- the rub (every mood) ----------------------------------------------
    Contact is made once at 30% and held to 78%: X stays pinned (a 1px press-in
    wobble only) while Y slides in opposite directions on each duck, so the
    tails grind against each other instead of tapping. Travel is 10px, tuned by
    measuring the painted gap - rotation swings the tail inward on top of the
-   translation, so a naive gap/2 overlaps the bodies. */
-.dp-happy .dp-duck-l { animation: dp-rub-l 3s ease-in-out infinite; }
-.dp-happy .dp-duck-r { animation: dp-rub-r 3s ease-in-out infinite; }
+   translation, so a naive gap/2 overlaps the bodies.
+
+   This used to run only in the happy mood. It now runs in all of them, so
+   the per-mood duck animations are gone - a second animation on the same
+   element replaces this one rather than combining with it. Mood still reads
+   through the puffs, hearts, zzz's and eyelids. */
+.dp-duck-l { animation: dp-rub-l 3s ease-in-out infinite; }
+.dp-duck-r { animation: dp-rub-r 3s ease-in-out infinite; }
 
 @keyframes dp-rub-l {
   0%, 16%   { transform: translateX(0) translateY(0) rotate(0deg); }
@@ -211,25 +216,19 @@
   92%, 100% { opacity: 0; transform: translateY(-16px) scale(0.9); }
 }
 
-/* ---- content: turned toward each other, gentle offset bobbing ---------- */
-.dp-content .dp-duck-l svg { transform: scaleX(1); }
-.dp-content .dp-duck-r svg { transform: scaleX(-1); }
-.dp-content .dp-duck-l { animation: dp-bob 2.6s ease-in-out infinite; }
-.dp-content .dp-duck-r { animation: dp-bob 2.6s ease-in-out infinite 0.5s; }
+/* ---- content ------------------------------------------------------------
+   The facing flip that used to turn the pair toward each other is gone: the
+   rub is a tail-to-tail move, and facing inward pointed the beaks together
+   instead. Every mood now keeps the default back-to-back pose.
 
-@keyframes dp-bob {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50%      { transform: translateY(-5px) rotate(2deg); }
-}
+   No bob either — a second animation on the same element would replace the
+   rub rather than combine with it. */
 
 /* ---- sleepy: eyes shut, slow breathing, zzz ---------------------------- */
-.dp-sleepy .dp-duck-l { animation: dp-breathe 4s ease-in-out infinite; }
-.dp-sleepy .dp-duck-r { animation: dp-breathe 4s ease-in-out infinite 0.8s; }
-
-@keyframes dp-breathe {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50%      { transform: translateY(2px) scale(1.03, 0.97); }
-}
+/* Sleepy keeps its shut eyes and zzz's, but still rubs - slower, so it
+   reads as drowsy rather than energetic. */
+.dp-sleepy .dp-duck-l { animation-duration: 5s; }
+.dp-sleepy .dp-duck-r { animation-duration: 5s; }
 
 .dp-zzz {
   position: absolute;

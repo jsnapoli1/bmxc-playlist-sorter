@@ -449,3 +449,43 @@ test('a poll does not touch songs a collaborator placed on the schedule', () => 
   assert.ok(next.tracks.b)
   assert.equal(next.blocks[0].entries[0].note, 'sing-along')
 })
+
+test('setTrackNotes stores a note on the song itself', () => {
+  // Arrange
+  const before = plan({ tracks: { a: track('a') }, trackOrder: ['a'] })
+
+  // Act
+  const after = applyOp(before, { type: 'setTrackNotes', trackId: 'a', notes: 'radio edit only' })
+
+  // Assert
+  assert.equal(after.tracks.a.notes, 'radio edit only')
+  assert.equal(before.tracks.a.notes, undefined)
+})
+
+test('setTrackNotes for an unknown song leaves the plan alone', () => {
+  // A note arriving for a song that has since left the library must not
+  // resurrect it as a bare id with no name or uri.
+  const before = plan({ tracks: { a: track('a') }, trackOrder: ['a'] })
+  const after = applyOp(before, { type: 'setTrackNotes', trackId: 'gone', notes: 'hi' })
+  assert.equal(after, before)
+  assert.equal(Object.keys(after.tracks).length, 1)
+})
+
+test('a re-import keeps a song note the way it keeps its section', () => {
+  // syncTracks rebuilds tracks from Spotify every poll; a note is not a
+  // Spotify field, so it has to survive that merge.
+  const before = plan({
+    tracks: { a: track('a', { sourceId: 's', notes: 'great closer', sectionId: 'sec_run' }) },
+    trackOrder: ['a'],
+  })
+
+  const after = applyOp(before, {
+    type: 'syncTracks',
+    sourceId: 's',
+    tracks: [{ ...track('a', { sourceId: 's' }), name: 'a (remaster)' }],
+  })
+
+  assert.equal(after.tracks.a.notes, 'great closer')
+  assert.equal(after.tracks.a.sectionId, 'sec_run')
+  assert.equal(after.tracks.a.name, 'a (remaster)')
+})

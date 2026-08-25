@@ -244,6 +244,24 @@ label.field > span {
 .track:active { cursor: grabbing; }
 .track.dragging { opacity: 0.4; }
 
+/* Wraps the row plus its note so the note sits under the row without
+   joining the row's flex layout. The border moves here so a song and its
+   note read as one item. */
+.track-wrap { border-bottom: 1px solid var(--border); }
+.track-wrap .track { border-bottom: none; }
+.track-wrap.dragging { opacity: 0.4; }
+.track-note {
+  display: block;
+  width: calc(100% - 20px);
+  margin: 0 10px 8px;
+  min-height: 30px;
+  font-size: 12px;
+  background: var(--bg-sunken);
+}
+/* A song that carries a note keeps its pencil visible rather than fading
+   with the other ghost buttons — it is a state, not just an action. */
+.btn.has-note { color: var(--accent); opacity: 1; }
+
 .art {
   width: 34px;
   height: 34px;
@@ -414,6 +432,19 @@ label.field > span {
   min-height: 34px;
   font-size: 13px;
   background: var(--bg-sunken);
+}
+
+/* The song's own note echoed on a placement — read-only, so it reads as
+   information rather than another field to fill in. */
+.track-note-echo {
+  margin-top: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-faint);
+  background: var(--bg-sunken);
+  border-radius: 5px;
+  white-space: pre-wrap;
 }
 
 .empty-state {

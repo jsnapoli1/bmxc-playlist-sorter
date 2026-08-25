@@ -51,6 +51,8 @@ export type Op =
   | { type: 'moveEntry'; fromBlockId: string; entryId: string; toBlockId: string; toIndex: number }
   | { type: 'reorderEntry'; blockId: string; entryId: string; delta: number }
   | { type: 'setEntryNote'; blockId: string; entryId: string; note: string }
+  /** A note on the song itself, seen everywhere it appears. */
+  | { type: 'setTrackNotes'; trackId: string; notes: string }
   | { type: 'clearBlockEntries'; blockId: string }
   | { type: 'renamePlan'; name: string }
 
