@@ -21,7 +21,6 @@ import type { Plan } from '../src/lib/types.ts'
 import type { Role } from '../src/lib/protocol.ts'
 import { randomToken, sha256Hex } from './crypto.ts'
 import { exchangeCode, OwnerSpotify, sealRefreshToken, SpotifyError } from './spotify.ts'
-import { canReorderPlaylist } from './playlistAccess.ts'
 import { mountPath, mountedUrl, stripMount } from './basePath.ts'
 import type { Env } from './env.ts'
 
@@ -406,11 +405,21 @@ async function setPlaylist(request: Request, env: Env, session: Session): Promis
       )
       const meta = await client.playlist(playlistId)
 
-      if (!canReorderPlaylist(meta, owner?.owner_id)) {
-        return fail(
-          'The connected Spotify account cannot edit that playlist. Reordering needs a playlist that account owns, or a collaborative one it has been added to.',
-          403,
-        )
+      // Owned is settled without a write. Otherwise ask Spotify whether this
+      // account can actually edit — the `collaborative` flag reads false for
+      // everyone but the owner, so it cannot answer this.
+      if (meta.owner?.id !== owner?.owner_id) {
+        const tracks = await client.playlistTrackUris(playlistId)
+        // The probe reorders an existing item; with nothing to move it would
+        // 404 on the index rather than report permission. An empty playlist
+        // has no order to sync yet, so accept it and let the first real sync
+        // surface any problem.
+        if (tracks.length > 0 && !(await client.canReorder(playlistId))) {
+          return fail(
+            'The connected Spotify account cannot edit that playlist. Add it as a collaborator on the playlist in Spotify, or use a playlist that account owns.',
+            403,
+          )
+        }
       }
     } catch (err) {
       const e = err as SpotifyError

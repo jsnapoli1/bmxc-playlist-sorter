@@ -334,6 +334,31 @@ export class OwnerSpotify {
       body: JSON.stringify({ ...move, ...(snapshotId ? { snapshot_id: snapshotId } : {}) }),
     })
   }
+
+  /**
+   * Whether this account may actually reorder the playlist.
+   *
+   * Asks Spotify instead of inferring it from metadata. The `collaborative`
+   * flag cannot be used for this: Spotify reports it as `false` to everyone
+   * except the owner, so a collaborative playlist someone else owns — the
+   * exact case worth allowing — reads identically to one that is genuinely
+   * off limits.
+   *
+   * The probe moves the first item to where it already is. That is a no-op
+   * on the playlist's contents but still goes through the write permission
+   * check, so a 403 is a definitive "cannot edit".
+   */
+  async canReorder(playlistId: string): Promise<boolean> {
+    try {
+      await this.reorder(playlistId, { range_start: 0, insert_before: 0, range_length: 1 })
+      return true
+    } catch (err) {
+      if ((err as SpotifyError).status === 403) return false
+      // Anything else (404, network, rate limit) is not a permission answer;
+      // let the caller's own error handling report it.
+      throw err
+    }
+  }
 }
 
 /** Encrypt a refresh token for storage. */
