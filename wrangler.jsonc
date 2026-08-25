@@ -95,9 +95,23 @@
       "workers_dev": false,
       "preview_urls": false,
 
+      // bmxcsite answers on both the bare domain and www (both are custom
+      // domains on that Worker, and www does not redirect), so the app has
+      // to cover both or a visitor who arrived via www gets the marketing
+      // site's SPA fallback instead of the app.
+      //
+      // redirect_uri is built from whichever host served the request, so
+      // BOTH callback URIs must be registered in the Spotify dashboard:
+      //   https://bmxc.camp/playlist-builder/api/auth/callback
+      //   https://www.bmxc.camp/playlist-builder/api/auth/callback
+      // and likewise both app-root URIs for the browser PKCE flow:
+      //   https://bmxc.camp/playlist-builder/
+      //   https://www.bmxc.camp/playlist-builder/
       "routes": [
         { "pattern": "bmxc.camp/playlist-builder", "zone_name": "bmxc.camp" },
-        { "pattern": "bmxc.camp/playlist-builder/*", "zone_name": "bmxc.camp" }
+        { "pattern": "bmxc.camp/playlist-builder/*", "zone_name": "bmxc.camp" },
+        { "pattern": "www.bmxc.camp/playlist-builder", "zone_name": "bmxc.camp" },
+        { "pattern": "www.bmxc.camp/playlist-builder/*", "zone_name": "bmxc.camp" }
       ],
 
       "vars": {
