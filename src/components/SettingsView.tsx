@@ -11,6 +11,7 @@ import ScopeNotice from './ScopeNotice.tsx'
 import { createPlaylistWithTracks } from '../spotify/api.ts'
 import { minutesOf } from '../lib/time.ts'
 import { loadToken } from '../spotify/auth.ts'
+import { appUrl } from '../lib/basePath.ts'
 
 export default function SettingsView({
   session,
@@ -103,7 +104,7 @@ export default function SettingsView({
               gets an invite link and edits alongside you — no Spotify account needed on
               their side. Your plan stays in this browser until you do.
             </p>
-            <a className="btn primary" href="/api/auth/login">
+            <a className="btn primary" href={appUrl('api/auth/login')}>
               Sign in with Spotify to share
             </a>
           </div>
