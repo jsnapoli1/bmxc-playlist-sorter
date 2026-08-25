@@ -56,17 +56,38 @@ export class SpotifyError extends Error {
  */
 export class RateLimited extends SpotifyError {
   constructor(readonly retryAfterS: number) {
-    super(
-      `Spotify is rate limiting this account. Syncing resumes automatically in about ${
-        retryAfterS < 60
-          ? `${Math.max(1, Math.round(retryAfterS))} seconds`
-          : `${Math.round(retryAfterS / 60)} minutes`
-      }.`,
-      429,
-      false,
-    )
+    super(describeRateLimit(retryAfterS), 429, false)
     this.name = 'RateLimited'
   }
+}
+
+/**
+ * Spotify's Retry-After, in words a person can act on.
+ *
+ * Long bans are real — Spotify hands out multi-hour ones for sustained
+ * over-use — and "365 minutes" is technically true but reads as a bug. Past
+ * an hour, give the wall-clock time it lifts and say plainly that the plan
+ * still works meanwhile, since the only actual advice is to carry on.
+ */
+export function describeRateLimit(retryAfterS: number, now = Date.now()): string {
+  const head = 'Spotify is rate limiting this account'
+
+  if (retryAfterS < 60) {
+    return `${head}. Syncing resumes automatically in about ${Math.max(1, Math.round(retryAfterS))} seconds.`
+  }
+  if (retryAfterS < 3600) {
+    return `${head}. Syncing resumes automatically in about ${Math.round(retryAfterS / 60)} minutes.`
+  }
+
+  const at = new Date(now + retryAfterS * 1000)
+  const clock = at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  const hours = Math.round(retryAfterS / 3600)
+  return (
+    `${head} for about ${hours} ${hours === 1 ? 'hour' : 'hours'} — Spotify does this ` +
+    `after too many requests in a short time. Syncing resumes on its own around ${clock}. ` +
+    `Keep editing: the plan is saved and shared as normal, and the whole order is pushed ` +
+    `to Spotify in one go once the limit lifts.`
+  )
 }
 
 function basicAuth(clientId: string, clientSecret: string): string {

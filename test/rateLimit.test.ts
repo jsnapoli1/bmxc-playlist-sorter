@@ -29,8 +29,8 @@ test('server errors stay retryable', () => {
   assert.equal(isPermanent(503), false)
 })
 
-// The wait Spotify asks for, phrased for a human. Mirrors RateLimited's
-// constructor.
+// How the wait is phrased. Restated rather than imported for the same
+// strip-only reason as above.
 function waitPhrase(retryAfterS: number): string {
   return retryAfterS < 60
     ? `${Math.max(1, Math.round(retryAfterS))} seconds`
@@ -42,7 +42,7 @@ test('a short wait is described in seconds', () => {
   assert.equal(waitPhrase(45), '45 seconds')
 })
 
-test('a long wait is described in minutes', () => {
+test('a wait under an hour is described in minutes', () => {
   assert.equal(waitPhrase(60), '1 minutes')
   assert.equal(waitPhrase(600), '10 minutes')
 })
@@ -51,4 +51,31 @@ test('a sub-second wait still reads as at least one second', () => {
   // Retry-After: 0 would otherwise render "0 seconds", which reads as a bug.
   assert.equal(waitPhrase(0), '1 seconds')
   assert.equal(waitPhrase(0.4), '1 seconds')
+})
+
+// Past an hour the message switches to hours plus a wall-clock time, because
+// "365 minutes" is accurate and useless. Mirrors describeRateLimit().
+function longForm(retryAfterS: number, now: number): { hours: number; clock: string } {
+  return {
+    hours: Math.round(retryAfterS / 3600),
+    clock: new Date(now + retryAfterS * 1000).toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+    }),
+  }
+}
+
+test('a multi-hour ban is described in hours, not hundreds of minutes', () => {
+  // The real case: Spotify returned Retry-After 21900, which rendered as
+  // "365 minutes".
+  const { hours } = longForm(21900, 0)
+  assert.equal(hours, 6)
+})
+
+test('a multi-hour ban names the time it lifts', () => {
+  // Fixed instant so the assertion cannot drift with the clock.
+  const noonUtc = Date.UTC(2026, 7, 25, 12, 0, 0)
+  const { clock } = longForm(3600, noonUtc)
+  // Local formatting varies by machine; assert the shape, not the zone.
+  assert.match(clock, /^\d{1,2}:\d{2}\s?(AM|PM)$/)
 })

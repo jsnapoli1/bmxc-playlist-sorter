@@ -17,7 +17,7 @@ import { canEdit, MAX_OPS_PER_MESSAGE } from '../src/lib/protocol.ts'
 import { applyOps } from '../src/lib/applyOp.ts'
 import { displayOrderedTracks } from '../src/lib/playlistOrder.ts'
 import { missingFromSpotify, reorderMoves } from '../src/lib/spotifyDiff.ts'
-import { OwnerSpotify, RateLimited, SpotifyError, sealRefreshToken } from './spotify.ts'
+import { describeRateLimit, OwnerSpotify, RateLimited, SpotifyError, sealRefreshToken } from './spotify.ts'
 import type { Env } from './env.ts'
 
 /** Wait for edits to settle before pushing to Spotify. */
@@ -30,7 +30,17 @@ const MAX_SYNC_FAILURES = 3
  * How often to re-read the playlist from Spotify while someone has it
  * open, so a song added in the Spotify app shows up on its own.
  */
-const POLL_MS = 15_000
+const POLL_MS = 120_000
+/**
+ * Hard floor between playlist reads, whatever asked for one.
+ *
+ * startPolling() polls immediately so a freshly opened page is current, and
+ * it runs on every socket connect — so a flapping phone connection turned
+ * into a read per reconnect on top of the interval. Worse, a read is one
+ * request per 100 songs, so a 300-song playlist tripled it. That is what
+ * earned a multi-hour rate-limit ban from Spotify.
+ */
+const MIN_POLL_GAP_MS = 30_000
 /**
  * Pause between reorder calls. A long reorder is one request per moved song,
  * and firing them back to back is what walks into Spotify's rolling-window
@@ -71,6 +81,15 @@ export class PlanRoom implements DurableObject {
   private polling = false
   /** Track ids last seen on Spotify, to skip work when nothing changed. */
   private lastPollSignature = ''
+  /** When the last Spotify read actually happened, for MIN_POLL_GAP_MS. */
+  private lastPollAt = 0
+  /**
+   * Epoch ms before which Spotify will refuse us. Checked on every natural
+   * trigger rather than relying on a timer: a long ban outlives the Durable
+   * Object, which is evicted when idle, so a setTimeout hours out would
+   * silently never fire.
+   */
+  private rateLimitedUntilMs = 0
 
   // `state` is required by the runtime's constructor signature. This room
   // keeps its authoritative copy in D1 rather than DO storage, so the handle
@@ -239,6 +258,13 @@ export class PlanRoom implements DurableObject {
       // out was to re-save the playlist in settings.
       if (!canEdit(session.role)) return
       if (!this.spotifyPlaylistId) return
+      // Retrying cannot shorten a rate-limit window; say how long is left
+      // rather than clearing the notice and appearing to have done something.
+      if (Date.now() < this.rateLimitedUntilMs) {
+        const leftMs = this.rateLimitedUntilMs - Date.now()
+        this.setSync({ status: 'pending', error: describeRateLimit(leftMs / 1000) })
+        return
+      }
       this.syncFailures = 0
       this.setSync({ status: 'idle', error: null })
       this.scheduleSync()
@@ -313,7 +339,10 @@ export class PlanRoom implements DurableObject {
     if (this.pollTimer !== null || !this.spotifyPlaylistId) return
     this.pollTimer = setInterval(() => void this.pollPlaylist(), POLL_MS) as unknown as number
     // Check straight away too, so opening the page picks up new songs
-    // without waiting a full interval.
+    // without waiting a full interval. Polling stops when the last person
+    // leaves, so this restarts on every reconnect — the gap floor inside
+    // pollPlaylist is what keeps a flapping connection from re-reading the
+    // playlist each time.
     void this.pollPlaylist()
   }
 
@@ -342,10 +371,16 @@ export class PlanRoom implements DurableObject {
    * own. Skips entirely when the song list is unchanged, which is the
    * normal case, so a quiet plan costs one read every 15s and no writes.
    */
-  private async pollPlaylist(): Promise<void> {
+  private async pollPlaylist(force = false): Promise<void> {
     if (this.polling || !this.plan || !this.spotifyPlaylistId) return
     // A push in flight would race a pull; the next tick will catch up.
     if (this.syncRunning || this.sync.status === 'paused') return
+    // Rate limiting is account-wide, so a read refused here also costs the
+    // sync that matters. Never read more often than the floor allows.
+    if (Date.now() < this.rateLimitedUntilMs) return
+    const since = Date.now() - this.lastPollAt
+    if (!force && this.lastPollAt > 0 && since < MIN_POLL_GAP_MS) return
+    this.lastPollAt = Date.now()
     this.polling = true
 
     try {
@@ -426,6 +461,15 @@ export class PlanRoom implements DurableObject {
    */
   private async runSync(): Promise<void> {
     if (!this.plan || !this.spotifyPlaylistId) return
+    // A ban can outlive this object; re-check the deadline rather than
+    // trusting a timer that may have died with an eviction.
+    if (Date.now() < this.rateLimitedUntilMs) {
+      const leftMs = this.rateLimitedUntilMs - Date.now()
+      this.setSync({ status: 'pending', error: describeRateLimit(leftMs / 1000) })
+      this.syncQueued = true
+      return
+    }
+
     this.syncRunning = true
     // Set by the rate-limit branch below to the wait Spotify asked for.
     let rateLimitedUntil = 0
@@ -501,6 +545,7 @@ export class PlanRoom implements DurableObject {
         // otherwise reschedule on the normal debounce and walk straight back
         // into the limit.
         rateLimitedUntil = waitMs
+        this.rateLimitedUntilMs = Date.now() + waitMs
         return
       }
 
