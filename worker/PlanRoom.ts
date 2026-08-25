@@ -228,6 +228,17 @@ export class PlanRoom implements DurableObject {
 
     if (message.t === 'ping') return
 
+    if (message.t === 'retrySync') {
+      // A paused sync never retries on its own, so without this the only way
+      // out was to re-save the playlist in settings.
+      if (!canEdit(session.role)) return
+      if (!this.spotifyPlaylistId) return
+      this.syncFailures = 0
+      this.setSync({ status: 'idle', error: null })
+      this.scheduleSync()
+      return
+    }
+
     if (message.t === 'hello') {
       this.send(session.socket, {
         t: 'snapshot',

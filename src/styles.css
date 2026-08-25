@@ -901,13 +901,31 @@ code.inline {
 .sync-status {
   display: flex;
   align-items: center;
+  /* Wraps so the expanded reason can take a full line of its own. */
+  flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
   max-width: 340px;
 }
 
 .sync-status .notice {
-  display: none; /* the dot's tooltip carries it in the header */
+  display: none; /* superseded by the Why? disclosure below */
+}
+
+.sync-why { flex: none; padding: 1px 6px; font-size: 11px; }
+
+/* Breaks onto its own line under the status, so a long Spotify message is
+   readable instead of squeezing the header. */
+.sync-why-detail {
+  flex-basis: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border: 1px solid #5a2b2b;
+  background: #241618;
+  color: #fecaca;
+  border-radius: 6px;
+  line-height: 1.35;
+  white-space: pre-wrap;
 }
 
 .share-link {

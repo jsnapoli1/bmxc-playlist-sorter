@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { ConnectionState } from '../lib/useSharedPlan.ts'
 import type { Presence, SyncState } from '../lib/protocol.ts'
 
@@ -30,13 +31,16 @@ export default function SyncStatus({
   peers,
   pending,
   you,
+  onRetry,
 }: {
   connection: ConnectionState
   sync: SyncState
   peers: Presence[]
   pending: number
   you: Presence | null
+  onRetry?: () => void
 }) {
+  const [showWhy, setShowWhy] = useState(false)
   const others = peers.filter((p) => p.collaboratorId !== you?.collaboratorId)
 
   // Losing the connection matters more than anything Spotify is doing.
@@ -64,13 +68,40 @@ export default function SyncStatus({
         <span className="tiny">{text}</span>
       </span>
 
+      {/* The reason used to live only in the dot's title attribute, which is
+          invisible on touch and undiscoverable on desktop — "sync is paused"
+          with no way to find out why. This button puts it one obvious tap
+          away without giving the header bar room to a long message. */}
+      {sync.error && (
+        <button
+          className="btn ghost sm sync-why"
+          onClick={() => setShowWhy((v) => !v)}
+          aria-expanded={showWhy}
+        >
+          {showWhy ? 'Hide' : 'Why?'}
+        </button>
+      )}
+
       {others.length > 0 && (
         <span className="tiny faint truncate" title={others.map((p) => p.displayName).join(', ')}>
           · {others.length === 1 ? `${others[0].displayName} is here` : `${others.length} others here`}
         </span>
       )}
 
-      {sync.error && <div className="notice error tiny">{sync.error}</div>}
+      {sync.error && showWhy && (
+        <div className="sync-why-detail tiny">
+          {sync.error}
+          {/* A paused sync never retries on its own, so telling the user why
+              without offering a way forward would leave them stuck. */}
+          {sync.status === 'paused' && onRetry && (
+            <div style={{ marginTop: 6 }}>
+              <button className="btn sm" onClick={onRetry}>
+                Try syncing again
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

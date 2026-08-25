@@ -79,6 +79,8 @@ export type ClientMessage =
   | { t: 'hello'; since: number }
   | { t: 'ops'; ops: Op[]; clientSeq: number }
   | { t: 'ping' }
+  /** Clear a paused sync and try again now. Editors only. */
+  | { t: 'retrySync' }
 
 /** Server → browser. */
 export type ServerMessage =

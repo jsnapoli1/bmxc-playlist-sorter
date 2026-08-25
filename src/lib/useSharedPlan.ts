@@ -29,6 +29,8 @@ export type SharedPlan = {
   pending: number
   error: string | null
   send: (ops: Op[]) => void
+  /** Clear a paused sync and try again now. */
+  retrySync: () => void
 }
 
 const RECONNECT_BASE_MS = 1_000
@@ -86,6 +88,15 @@ export function useSharedPlan(enabled: boolean): SharedPlan {
     },
     [enabled, flush],
   )
+
+  const retrySync = useCallback(() => {
+    const socket = socketRef.current
+    if (!socket || socket.readyState !== WebSocket.OPEN) return
+    // Show the attempt straight away; the server's own sync message
+    // replaces this the moment it knows better.
+    setSync((prev) => ({ ...prev, status: 'pending', error: null }))
+    socket.send(JSON.stringify({ t: 'retrySync' } satisfies ClientMessage))
+  }, [])
 
   useEffect(() => {
     if (!enabled) return
@@ -204,7 +215,7 @@ export function useSharedPlan(enabled: boolean): SharedPlan {
   }, [enabled, flush])
 
   return useMemo(
-    () => ({ connection, plan, you, peers, sync, pending, error, send }),
-    [connection, plan, you, peers, sync, pending, error, send],
+    () => ({ connection, plan, you, peers, sync, pending, error, send, retrySync }),
+    [connection, plan, you, peers, sync, pending, error, send, retrySync],
   )
 }

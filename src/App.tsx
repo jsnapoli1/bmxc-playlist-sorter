@@ -154,6 +154,7 @@ function Shell({ session, shared, authError }: ShellProps) {
             peers={shared.peers}
             pending={shared.pending}
             you={shared.you}
+            onRetry={shared.retrySync}
           />
         )}
 
