@@ -21,6 +21,7 @@ import type { Plan } from '../src/lib/types.ts'
 import type { Role } from '../src/lib/protocol.ts'
 import { randomToken, sha256Hex } from './crypto.ts'
 import { exchangeCode, OwnerSpotify, sealRefreshToken, SpotifyError } from './spotify.ts'
+import { canReorderPlaylist } from './playlistAccess.ts'
 import { mountPath, mountedUrl, stripMount } from './basePath.ts'
 import type { Env } from './env.ts'
 
@@ -404,9 +405,10 @@ async function setPlaylist(request: Request, env: Env, session: Session): Promis
         env.SPOTIFY_CLIENT_SECRET,
       )
       const meta = await client.playlist(playlistId)
-      if (meta.owner.id !== owner?.owner_id) {
+
+      if (!canReorderPlaylist(meta, owner?.owner_id)) {
         return fail(
-          'That playlist belongs to a different Spotify account. Reordering only works on playlists the connected account owns.',
+          'The connected Spotify account cannot edit that playlist. Reordering needs a playlist that account owns, or a collaborative one it has been added to.',
           403,
         )
       }

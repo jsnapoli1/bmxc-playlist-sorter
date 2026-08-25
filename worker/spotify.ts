@@ -210,7 +210,7 @@ export class OwnerSpotify {
       if (res.status === 403) {
         throw new SpotifyError(
           detail ||
-            'Spotify refused the change. You can only reorder a playlist owned by the connected account.',
+            'Spotify refused the change. Reordering needs a playlist the connected account owns, or a collaborative one it has been added to.',
           403,
           true,
         )
@@ -234,7 +234,14 @@ export class OwnerSpotify {
    * these responses, and a filter that no longer matches yields blanks
    * rather than an error — which is how an empty read went unnoticed.
    */
-  async playlist(id: string): Promise<{ id: string; name: string; owner: { id: string }; snapshot_id: string }> {
+  async playlist(id: string): Promise<{
+    id: string
+    name: string
+    owner: { id: string }
+    /** True when anyone with the link can edit. Only ever set on private playlists. */
+    collaborative?: boolean
+    snapshot_id: string
+  }> {
     return this.call(`/playlists/${id}`)
   }
 

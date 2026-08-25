@@ -18,6 +18,7 @@ import { applyOps } from '../src/lib/applyOp.ts'
 import { displayOrderedTracks } from '../src/lib/playlistOrder.ts'
 import { missingFromSpotify, reorderMoves } from '../src/lib/spotifyDiff.ts'
 import { OwnerSpotify, SpotifyError, sealRefreshToken } from './spotify.ts'
+import { canReorderPlaylist } from './playlistAccess.ts'
 import type { Env } from './env.ts'
 
 /** Wait for edits to settle before pushing to Spotify. */
@@ -402,9 +403,9 @@ export class PlanRoom implements DurableObject {
       const playlistId = this.spotifyPlaylistId
 
       const meta = await spotify.playlist(playlistId)
-      if (meta.owner.id !== this.ownerId) {
+      if (!canReorderPlaylist(meta, this.ownerId)) {
         throw new SpotifyError(
-          `This playlist belongs to another Spotify account, so it cannot be reordered from here.`,
+          `The connected Spotify account cannot edit this playlist, so it cannot be reordered from here.`,
           403,
           true,
         )
