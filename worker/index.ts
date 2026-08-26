@@ -423,33 +423,115 @@ async function signIn(request: Request, env: Env, url: URL, mount: string): Prom
       password_salt: string
     }>()
 
+  // Every row this credential opens, not just the first: someone invited to
+  // two plans under the same name and password should see both and choose.
+  const matched: { id: string; plan_id: string; role: Role }[] = []
   for (const row of rows.results ?? []) {
-    if (!(await verifyPassword(password, row.password_salt, row.password_hash))) continue
-
-    const sessionToken = randomToken(32)
-    await env.DB.prepare(
-      'UPDATE collaborators SET session_hash = ?, last_seen_at = ? WHERE id = ?',
-    )
-      .bind(await sha256Hex(sessionToken), Date.now(), row.id)
-      .run()
-
-    const plan = await env.DB.prepare('SELECT name FROM plans WHERE id = ?')
-      .bind(row.plan_id)
-      .first<{ name: string }>()
-
-    return json(
-      { planId: row.plan_id, role: row.role, displayName: name, planName: plan?.name ?? '' },
-      {
-        headers: {
-          'Set-Cookie': setCookie(SESSION_COOKIE, sessionToken, SESSION_MAX_AGE, isSecure(url), mount),
-        },
-      },
-    )
+    if (await verifyPassword(password, row.password_salt, row.password_hash)) {
+      matched.push({ id: row.id, plan_id: row.plan_id, role: row.role })
+    }
   }
 
   // One message for both "no such name" and "wrong password", so this cannot
   // be used to discover who is on a plan.
-  return fail('That name and password do not match. Ask for the invite link again.', 403)
+  if (!matched.length) {
+    return fail('That name and password do not match. Ask for the invite link again.', 403)
+  }
+
+  // The session lands on the most recently used plan; `plans` below lets the
+  // app offer the others without a second sign-in.
+  const primary = matched[0]
+  const sessionToken = randomToken(32)
+  await env.DB.prepare('UPDATE collaborators SET session_hash = ?, last_seen_at = ? WHERE id = ?')
+    .bind(await sha256Hex(sessionToken), Date.now(), primary.id)
+    .run()
+
+  const names = await env.DB.prepare(
+    `SELECT id, name FROM plans WHERE id IN (${matched.map(() => '?').join(',')})`,
+  )
+    .bind(...matched.map((m) => m.plan_id))
+    .all<{ id: string; name: string }>()
+  const nameById = new Map((names.results ?? []).map((r) => [r.id, r.name]))
+
+  return json(
+    {
+      planId: primary.plan_id,
+      role: primary.role,
+      displayName: name,
+      planName: nameById.get(primary.plan_id) ?? '',
+      plans: matched.map((m) => ({
+        planId: m.plan_id,
+        role: m.role,
+        name: nameById.get(m.plan_id) ?? '',
+      })),
+    },
+    {
+      headers: {
+        'Set-Cookie': setCookie(SESSION_COOKIE, sessionToken, SESSION_MAX_AGE, isSecure(url), mount),
+      },
+    },
+  )
+}
+
+/**
+ * Every plan this person can reach, by name, and which one they are in.
+ *
+ * The owner's own list comes from listPlans (plans they own). This is the
+ * collaborator equivalent: rows sharing their display name, which is what a
+ * single name-and-password sign-in unlocks.
+ */
+async function myPlans(env: Env, session: Session): Promise<Response> {
+  const rows = await env.DB.prepare(
+    `SELECT c.plan_id AS planId, c.role AS role, p.name AS name
+       FROM collaborators c
+       JOIN plans p ON p.id = c.plan_id
+      WHERE c.display_name = ?
+      ORDER BY c.last_seen_at DESC`,
+  )
+    .bind(session.displayName)
+    .all<{ planId: string; role: Role; name: string }>()
+
+  return json({ plans: rows.results ?? [], activePlanId: session.planId })
+}
+
+/**
+ * Move this session onto another plan the same person belongs to.
+ *
+ * Unlike switchTo (owner only), this does not mint a collaborator row: the
+ * person already has one on the target plan from redeeming its invite. It
+ * just moves the session cookie onto it, keeping that row's own role.
+ */
+async function openMyPlan(
+  env: Env,
+  session: Session,
+  planId: string,
+  url: URL,
+  mount: string,
+): Promise<Response> {
+  const target = await env.DB.prepare(
+    'SELECT id, role FROM collaborators WHERE plan_id = ? AND display_name = ?',
+  )
+    .bind(planId, session.displayName)
+    .first<{ id: string; role: Role }>()
+  if (!target) return fail('You have not been invited to that playlist.', 403)
+
+  const sessionToken = randomToken(32)
+  await env.DB.prepare('UPDATE collaborators SET session_hash = ?, last_seen_at = ? WHERE id = ?')
+    .bind(await sha256Hex(sessionToken), Date.now(), target.id)
+    .run()
+
+  const plan = await env.DB.prepare('SELECT name FROM plans WHERE id = ?')
+    .bind(planId)
+    .first<{ name: string }>()
+
+  return json(
+    { planId, role: target.role, name: plan?.name ?? '' },
+    {
+      headers: {
+        'Set-Cookie': setCookie(SESSION_COOKIE, sessionToken, SESSION_MAX_AGE, isSecure(url), mount),
+      },
+    },
+  )
 }
 
 /** Create or rotate a share link. Owner only. */
@@ -820,6 +902,15 @@ export default {
     if (path === '/api/plans') {
       if (request.method === 'GET') return listPlans(env, session)
       if (request.method === 'POST') return createPlan(request, env, session, url, mount)
+    }
+
+    if (path === '/api/my-plans' && request.method === 'GET') {
+      return myPlans(env, session)
+    }
+
+    const mineMatch = path.match(/^\/api\/my-plans\/([A-Za-z0-9_]+)\/open$/)
+    if (mineMatch && request.method === 'POST') {
+      return openMyPlan(env, session, mineMatch[1], url, mount)
     }
 
     const switchMatch = path.match(/^\/api\/plans\/([A-Za-z0-9_]+)\/open$/)

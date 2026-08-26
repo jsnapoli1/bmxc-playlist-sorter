@@ -69,7 +69,13 @@ export default function BlockInspector({
         description,
         uris,
       })
-      setPushState({ busy: false, message: `Created with ${uris.length} songs.`, url: result.url })
+      // Name the account: a collaborator would otherwise assume this landed
+      // in the camp's Spotify, since that is what the plan syncs to.
+      setPushState({
+        busy: false,
+        message: `Created in your Spotify with ${uris.length} songs.`,
+        url: result.url,
+      })
     } catch (err) {
       setPushState({ busy: false, message: err instanceof Error ? err.message : String(err) })
     }
@@ -323,8 +329,8 @@ export default function BlockInspector({
             onClick={pushToSpotify}
             title={
               status === 'connected'
-                ? 'Create a Spotify playlist from this block'
-                : 'Connect Spotify first'
+                ? 'Create a playlist in your own Spotify from this block'
+                : 'Connect your own Spotify first'
             }
           >
             {pushState.busy ? 'Working…' : 'Save block as Spotify playlist'}

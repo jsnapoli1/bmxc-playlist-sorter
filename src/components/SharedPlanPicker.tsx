@@ -31,12 +31,16 @@ export default function SharedPlanPicker({
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    if (!canManage) return
     try {
-      const res = await fetch(appUrl('api/plans'))
+      // Owners see every plan on the account; collaborators see the ones
+      // they have been invited to under this name, which a single
+      // name-and-password sign-in unlocks.
+      const res = await fetch(appUrl(canManage ? 'api/plans' : 'api/my-plans'))
       if (!res.ok) return
-      const data = (await res.json()) as { plans: PlanRow[] }
-      setPlans(data.plans)
+      const data = (await res.json()) as { plans: (PlanRow & { planId?: string })[] }
+      // The two endpoints name the id differently; normalise here so the
+      // rest of the component does not care which one answered.
+      setPlans(data.plans.map((p) => ({ ...p, id: p.id ?? p.planId ?? '' })))
     } catch {
       // Offline: keep showing just the active plan rather than an error.
     }
@@ -46,8 +50,9 @@ export default function SharedPlanPicker({
     void load()
   }, [load])
 
-  // A collaborator only has the one plan their link was for.
-  if (!canManage) {
+  // A collaborator invited to only one plan has nothing to switch between,
+  // so the picker would just be a dropdown with a single entry.
+  if (!canManage && plans.length < 2) {
     return (
       <span className="pill truncate" title={activeName}>
         {activeName}
@@ -59,7 +64,10 @@ export default function SharedPlanPicker({
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch(appUrl(`api/plans/${planId}/open`), { method: 'POST' })
+      const res = await fetch(
+        appUrl(canManage ? `api/plans/${planId}/open` : `api/my-plans/${planId}/open`),
+        { method: 'POST' },
+      )
       if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? 'Could not open that playlist.')
       // The session cookie changed, so reload rather than trying to
       // re-point the live socket at a different plan.
@@ -110,8 +118,12 @@ export default function SharedPlanPicker({
           {p.name}
         </option>
       ))}
-      <option disabled>──────────</option>
-      <option value={NEW_PLAN}>+ New playlist plan…</option>
+      {canManage && (
+        <>
+          <option disabled>──────────</option>
+          <option value={NEW_PLAN}>+ New playlist plan…</option>
+        </>
+      )}
     </select>
   )
 }

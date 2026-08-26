@@ -169,7 +169,12 @@ function Shell({ session, shared, authError }: ShellProps) {
           </button>
         )}
 
-        {!session && (
+        {/* Shown to collaborators too, not just the local-only app. Linking
+            their own Spotify is what lets them save a block as a playlist in
+            their own account — the camp's connection is server-side and
+            separate, so this cannot touch it. The owner already reaches
+            Spotify through the settings tab. */}
+        {(!session || session.role !== 'owner') && (
         <button
           className="btn sm"
           onClick={() => {
@@ -180,7 +185,11 @@ function Shell({ session, shared, authError }: ShellProps) {
             if (status === 'idle' && hasBuiltInClientId) void connect()
             else setTab('settings')
           }}
-          title={status === 'connected' ? 'Spotify connected' : 'Connect Spotify'}
+          title={
+            status === 'connected'
+              ? 'Spotify connected'
+              : 'Connect your own Spotify to save blocks as playlists'
+          }
         >
           <span
             className="dot"
