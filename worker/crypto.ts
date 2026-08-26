@@ -84,3 +84,49 @@ export function timingSafeEqual(a: string, b: string): boolean {
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
   return diff === 0
 }
+
+/**
+ * Password hashing for collaborators.
+ *
+ * PBKDF2 rather than a bare SHA-256: these are camp passwords people will
+ * choose badly and reuse, and a plain digest is fast enough to brute-force
+ * a whole leaked table. 100k iterations costs a few milliseconds per sign-in
+ * — irrelevant next to the D1 round trip — and makes that attack expensive.
+ *
+ * Not bcrypt/scrypt/argon2 only because WebCrypto in Workers offers PBKDF2
+ * natively and pulling in a KDF library is not worth it here.
+ */
+const PBKDF2_ITERATIONS = 100_000
+
+/** A fresh random salt, hex. One per password, never reused. */
+export function newSalt(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/** Derive the stored hash for a password with its salt. Hex. */
+export async function hashPassword(password: string, salt: string): Promise<string> {
+  const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, [
+    'deriveBits',
+  ])
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: encoder.encode(salt),
+      iterations: PBKDF2_ITERATIONS,
+      hash: 'SHA-256',
+    },
+    key,
+    256,
+  )
+  return [...new Uint8Array(bits)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/** Whether a presented password matches the stored hash. */
+export async function verifyPassword(
+  password: string,
+  salt: string,
+  expected: string,
+): Promise<boolean> {
+  return timingSafeEqual(await hashPassword(password, salt), expected)
+}

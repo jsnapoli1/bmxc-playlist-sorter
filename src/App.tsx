@@ -17,6 +17,7 @@ import type { SharedPlan } from './lib/useSharedPlan.ts'
 import { planLabel } from './lib/planMigration.ts'
 import type { AuthError } from './lib/authError.ts'
 import SharedPlanPicker from './components/SharedPlanPicker.tsx'
+import SignInModal from './components/SignInModal.tsx'
 
 type Tab = 'plan' | 'playlist' | 'run' | 'settings'
 
@@ -36,6 +37,7 @@ function Shell({ session, shared, authError }: ShellProps) {
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
   const [scheduleModal, setScheduleModal] = useState(false)
   const [songsModal, setSongsModal] = useState(false)
+  const [signInOpen, setSignInOpen] = useState(false)
   const isMobile = useMediaQuery(MOBILE_QUERY)
   // On a phone the block editor takes over the screen; this picks which half
   // of it is showing.
@@ -156,6 +158,15 @@ function Shell({ session, shared, authError }: ShellProps) {
             you={shared.you}
             onRetry={shared.retrySync}
           />
+        )}
+
+        {/* Only useful when not already in a shared plan: the way back for
+            someone whose session cookie is gone and whose invite link is
+            long lost. */}
+        {!session && (
+          <button className="btn sm" onClick={() => setSignInOpen(true)} title="Sign back into a shared plan">
+            Sign in
+          </button>
         )}
 
         {!session && (
@@ -300,6 +311,7 @@ function Shell({ session, shared, authError }: ShellProps) {
       )}
 
       {scheduleModal && <ImportScheduleModal onClose={() => setScheduleModal(false)} />}
+      {signInOpen && <SignInModal onClose={() => setSignInOpen(false)} />}
       {songsModal && (
         <SpotifyImportModal onClose={() => setSongsModal(false)} isShared={Boolean(session)} />
       )}

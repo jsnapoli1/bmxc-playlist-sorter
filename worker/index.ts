@@ -19,7 +19,7 @@
 
 import type { Plan } from '../src/lib/types.ts'
 import type { Role } from '../src/lib/protocol.ts'
-import { randomToken, sha256Hex } from './crypto.ts'
+import { hashPassword, newSalt, randomToken, sha256Hex, verifyPassword } from './crypto.ts'
 import { exchangeCode, OwnerSpotify, sealRefreshToken, SpotifyError } from './spotify.ts'
 import { mountPath, mountedUrl, stripMount } from './basePath.ts'
 import type { Env } from './env.ts'
@@ -29,6 +29,12 @@ export { PlanRoom } from './PlanRoom.ts'
 const SESSION_COOKIE = 'cps_session'
 const OAUTH_STATE_COOKIE = 'cps_oauth_state'
 const SESSION_MAX_AGE = 60 * 60 * 24 * 365 // a year; this is a year-long project
+/**
+ * Short on purpose. This guards a camp playlist behind an invite link that
+ * is already the real credential — a long-password rule would just push
+ * people to write it on the cabin wall.
+ */
+const MIN_PASSWORD_LENGTH = 4
 
 const SCOPES = [
   'user-read-private',
@@ -296,9 +302,13 @@ async function join(
   token: string,
   mount: string,
 ): Promise<Response> {
-  const body = (await request.json().catch(() => ({}))) as { name?: string }
+  const body = (await request.json().catch(() => ({}))) as { name?: string; password?: string }
   const name = (body.name ?? '').trim().slice(0, 60)
+  const password = body.password ?? ''
   if (!name) return fail('Please enter a name so others know who is editing.', 400)
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return fail(`Please choose a password of at least ${MIN_PASSWORD_LENGTH} characters.`, 400)
+  }
 
   const link = await env.DB.prepare(
     'SELECT plan_id, role FROM share_links WHERE token = ?',
@@ -309,9 +319,56 @@ async function join(
 
   const sessionToken = randomToken(32)
   const now = Date.now()
+
+  // Someone already using this name on this plan is treated as that person
+  // coming back, not as a new participant. Without this, every lost cookie
+  // added another row and the list filled with duplicates of the same people.
+  const existing = await env.DB.prepare(
+    'SELECT id, password_hash, password_salt FROM collaborators WHERE plan_id = ? AND display_name = ?',
+  )
+    .bind(link.plan_id, name)
+    .first<{ id: string; password_hash: string | null; password_salt: string | null }>()
+
+  if (existing) {
+    if (existing.password_hash && existing.password_salt) {
+      const ok = await verifyPassword(password, existing.password_salt, existing.password_hash)
+      // Deliberately vague: confirming that a name exists would let anyone
+      // with the link enumerate who is on the plan.
+      if (!ok) return fail('That name is taken, or the password does not match.', 403)
+    } else {
+      // Joined before passwords existed. The link is the credential either
+      // way, so let them claim their own row and set one now rather than
+      // stranding them behind a password they were never asked for.
+      const salt = newSalt()
+      await env.DB.prepare(
+        'UPDATE collaborators SET password_hash = ?, password_salt = ? WHERE id = ?',
+      )
+        .bind(await hashPassword(password, salt), salt, existing.id)
+        .run()
+    }
+
+    // Reuse the row: a new session replaces the old one, and the role on the
+    // link wins so an upgraded invite takes effect on sign-in.
+    await env.DB.prepare(
+      'UPDATE collaborators SET session_hash = ?, role = ?, last_seen_at = ? WHERE id = ?',
+    )
+      .bind(await sha256Hex(sessionToken), link.role, now, existing.id)
+      .run()
+
+    return json(
+      { planId: link.plan_id, role: link.role, displayName: name, returning: true },
+      {
+        headers: {
+          'Set-Cookie': setCookie(SESSION_COOKIE, sessionToken, SESSION_MAX_AGE, isSecure(url), mount),
+        },
+      },
+    )
+  }
+
+  const salt = newSalt()
   await env.DB.prepare(
-    `INSERT INTO collaborators (id, plan_id, display_name, role, session_hash, created_at, last_seen_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO collaborators (id, plan_id, display_name, role, session_hash, password_hash, password_salt, created_at, last_seen_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       `col_${randomToken(12)}`,
@@ -319,6 +376,8 @@ async function join(
       name,
       link.role,
       await sha256Hex(sessionToken),
+      await hashPassword(password, salt),
+      salt,
       now,
       now,
     )
@@ -328,6 +387,69 @@ async function join(
     { planId: link.plan_id, role: link.role, displayName: name },
     { headers: { 'Set-Cookie': setCookie(SESSION_COOKIE, sessionToken, SESSION_MAX_AGE, isSecure(url), mount) } },
   )
+}
+
+/**
+ * Sign back in with the name and password chosen when joining — no invite
+ * link needed.
+ *
+ * Without this, losing the session cookie meant the app fell back to the
+ * empty local-only plan and the only way back was hunting down the original
+ * invite link, which is how the participant list filled with duplicates.
+ *
+ * The name is matched across plans rather than within one, because a
+ * returning collaborator has no idea what a plan id is. A name reused on two
+ * plans with the same password is ambiguous, so the most recently active
+ * match wins.
+ */
+async function signIn(request: Request, env: Env, url: URL, mount: string): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as { name?: string; password?: string }
+  const name = (body.name ?? '').trim().slice(0, 60)
+  const password = body.password ?? ''
+  if (!name || !password) return fail('Enter the name and password you chose.', 400)
+
+  const rows = await env.DB.prepare(
+    `SELECT id, plan_id, role, password_hash, password_salt
+       FROM collaborators
+      WHERE display_name = ? AND password_hash IS NOT NULL
+      ORDER BY last_seen_at DESC`,
+  )
+    .bind(name)
+    .all<{
+      id: string
+      plan_id: string
+      role: Role
+      password_hash: string
+      password_salt: string
+    }>()
+
+  for (const row of rows.results ?? []) {
+    if (!(await verifyPassword(password, row.password_salt, row.password_hash))) continue
+
+    const sessionToken = randomToken(32)
+    await env.DB.prepare(
+      'UPDATE collaborators SET session_hash = ?, last_seen_at = ? WHERE id = ?',
+    )
+      .bind(await sha256Hex(sessionToken), Date.now(), row.id)
+      .run()
+
+    const plan = await env.DB.prepare('SELECT name FROM plans WHERE id = ?')
+      .bind(row.plan_id)
+      .first<{ name: string }>()
+
+    return json(
+      { planId: row.plan_id, role: row.role, displayName: name, planName: plan?.name ?? '' },
+      {
+        headers: {
+          'Set-Cookie': setCookie(SESSION_COOKIE, sessionToken, SESSION_MAX_AGE, isSecure(url), mount),
+        },
+      },
+    )
+  }
+
+  // One message for both "no such name" and "wrong password", so this cannot
+  // be used to discover who is on a plan.
+  return fail('That name and password do not match. Ask for the invite link again.', 403)
 }
 
 /** Create or rotate a share link. Owner only. */
@@ -660,6 +782,9 @@ export default {
 
     // --- unauthenticated -------------------------------------------
     if (path === '/api/auth/login') return authLogin(env, url, mount)
+    if (path === '/api/signin' && request.method === 'POST') {
+      return signIn(request, env, url, mount)
+    }
     if (path === '/api/auth/callback') return authCallback(request, env, url, mount)
 
     const joinMatch = path.match(/^\/api\/join\/([A-Za-z0-9]+)$/)
