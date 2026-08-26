@@ -37,7 +37,11 @@ export function actionToOp(action: Action, uid: IdMaker): Op | null {
       return {
         type: 'addSection',
         id: uid('sec'),
-        name: action.name,
+        // Named here as well as in the local reducer. Passing the empty
+        // string straight through gave a shared plan a nameless section,
+        // which rendered as a zero-width button with nothing to click — the
+        // section existed but could never be renamed.
+        name: action.name || 'New section',
         color: action.color ?? '#64748b',
       }
     case 'updateSection':

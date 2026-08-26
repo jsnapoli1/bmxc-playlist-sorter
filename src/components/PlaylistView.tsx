@@ -94,7 +94,10 @@ function SectionHeader({
           title={isUnsorted ? 'Songs you have not filed yet' : 'Rename this section'}
           disabled={isUnsorted}
         >
-          {isUnsorted ? 'Unsorted' : section.name}
+          {/* A section whose name is empty would render a zero-width button
+              with nothing to click, stranding it un-renameable. Any already
+              saved that way stay reachable through this placeholder. */}
+          {isUnsorted ? 'Unsorted' : section.name.trim() || 'Untitled section'}
         </button>
       )}
 
@@ -413,7 +416,19 @@ export default function PlaylistView({ onOpenImport }: Props) {
             {total} {total === 1 ? 'song' : 'songs'}
           </span>
           <div className="spacer" />
-          <button className="btn sm" onClick={() => dispatch({ type: 'addSection', name: '' })}>
+          <button
+            className="btn sm"
+            onClick={() =>
+              // Named and coloured here so the shared and local paths agree.
+              // An empty name reached the wire unchanged and produced a
+              // section that could not be clicked to rename.
+              dispatch({
+                type: 'addSection',
+                name: `Section ${(plan.sections?.length ?? 0) + 1}`,
+                color: SECTION_COLORS[(plan.sections?.length ?? 0) % SECTION_COLORS.length],
+              })
+            }
+          >
             + Section
           </button>
           <button className="btn sm" onClick={onOpenImport}>
