@@ -489,3 +489,45 @@ test('a re-import keeps a song note the way it keeps its section', () => {
   assert.equal(after.tracks.a.sectionId, 'sec_run')
   assert.equal(after.tracks.a.name, 'a (remaster)')
 })
+
+test('a song arriving already filed lands beside the song it follows', () => {
+  // Spotify reported it between a and b, both in sec_run, so the poll filed
+  // it into sec_run. Appending would put it correctly in the section but at
+  // the bottom of it — not where it was actually placed.
+  const before = plan({
+    tracks: {
+      a: track('a', { sourceId: 's', sectionId: 'sec_run' }),
+      b: track('b', { sourceId: 's', sectionId: 'sec_run' }),
+    },
+    trackOrder: ['a', 'b'],
+  })
+
+  const after = applyOp(before, {
+    type: 'syncTracks',
+    sourceId: 's',
+    tracks: [
+      track('a', { sourceId: 's', sectionId: 'sec_run' }),
+      track('NEW', { sourceId: 's', sectionId: 'sec_run' }),
+      track('b', { sourceId: 's', sectionId: 'sec_run' }),
+    ],
+  })
+
+  assert.deepEqual(after.trackOrder, ['a', 'NEW', 'b'])
+})
+
+test('a song arriving unfiled still goes to the end', () => {
+  // No section means nothing was inferred, so there is no anchor to sit
+  // beside and the old append behaviour is right.
+  const before = plan({
+    tracks: { a: track('a', { sourceId: 's', sectionId: 'sec_run' }) },
+    trackOrder: ['a'],
+  })
+
+  const after = applyOp(before, {
+    type: 'syncTracks',
+    sourceId: 's',
+    tracks: [track('a', { sourceId: 's', sectionId: 'sec_run' }), track('NEW', { sourceId: 's' })],
+  })
+
+  assert.deepEqual(after.trackOrder, ['a', 'NEW'])
+})

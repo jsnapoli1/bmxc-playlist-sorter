@@ -17,6 +17,7 @@ import { canEdit, MAX_OPS_PER_MESSAGE } from '../src/lib/protocol.ts'
 import { applyOps } from '../src/lib/applyOp.ts'
 import { displayOrderedTracks } from '../src/lib/playlistOrder.ts'
 import { missingFromSpotify, reorderMoves } from '../src/lib/spotifyDiff.ts'
+import { inferSections } from '../src/lib/inheritSection.ts'
 import { describeRateLimit, OwnerSpotify, RateLimited, SpotifyError, sealRefreshToken } from './spotify.ts'
 import type { Env } from './env.ts'
 
@@ -400,9 +401,24 @@ export class PlanRoom implements DurableObject {
       ).length
       if (added === 0 && removed === 0) return
 
+      // A song added inside one of the section runs the app pushed to
+      // Spotify carries its intent in its position. Resolve that before
+      // applying, so it lands filed rather than in Unsorted.
+      const placed = new Map(
+        Object.values(this.plan.tracks).map((t) => [t.id, { id: t.id, sectionId: t.sectionId }]),
+      )
+      const newIds = tracks.filter((t) => !known.has(t.id)).map((t) => t.id)
+      const inferred = inferSections(
+        tracks.map((t) => t.id),
+        placed,
+        newIds,
+      )
+
       const op: Op = {
         type: 'syncTracks',
-        tracks,
+        tracks: tracks.map((t) =>
+          inferred.has(t.id) ? { ...t, sectionId: inferred.get(t.id) } : t,
+        ),
         sourceId: this.spotifyPlaylistId,
       }
       this.plan = applyOps(this.plan, [op])

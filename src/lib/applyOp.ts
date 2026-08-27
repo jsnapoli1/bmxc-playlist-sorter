@@ -113,7 +113,32 @@ export function applyOp(plan: Plan, op: Op): Plan {
 
       const order = orderedTrackIds(plan).filter((id) => tracks[id])
       const added = incoming.map((t) => t.id).filter((id) => !order.includes(id))
-      return { ...plan, tracks, trackOrder: [...order, ...added] }
+
+      // A song that arrived already filed into a section was placed there
+      // deliberately in Spotify, so put it beside the song it followed
+      // rather than at the very end — appending would file it correctly but
+      // drop it to the bottom of its section, which is not where it was put.
+      const incomingOrder = incoming.map((t) => t.id)
+      const next = [...order]
+      const appended: string[] = []
+      for (const id of added) {
+        const section = tracks[id]?.sectionId
+        if (!section) {
+          appended.push(id)
+          continue
+        }
+        // The song it sits behind on Spotify, if that one is already placed.
+        const at = incomingOrder.indexOf(id)
+        let anchor = -1
+        for (let i = at - 1; i >= 0 && anchor === -1; i--) {
+          const candidate = next.indexOf(incomingOrder[i])
+          if (candidate !== -1 && tracks[incomingOrder[i]]?.sectionId === section) anchor = candidate
+        }
+        if (anchor === -1) appended.push(id)
+        else next.splice(anchor + 1, 0, id)
+      }
+
+      return { ...plan, tracks, trackOrder: [...next, ...appended] }
     }
 
     case 'addSource': {
