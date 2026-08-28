@@ -34,6 +34,9 @@ export type SpotifyTrack = {
   sourceId: string
 }
 
+/** Spotify accepts at most this many uris in one replace call. */
+const REPLACE_LIMIT = 100
+
 /** Longest 429 wait worth sitting through inside a single request. */
 const MAX_INLINE_RETRY_S = 5
 
@@ -386,6 +389,32 @@ export class OwnerSpotify {
     return this.call(`/playlists/${playlistId}/items`, {
       method: 'PUT',
       body: JSON.stringify({ ...move, ...(snapshotId ? { snapshot_id: snapshotId } : {}) }),
+    })
+  }
+
+  /**
+   * Replace the playlist's contents outright with `uris`, in order.
+   *
+   * One request for up to 100 songs, against one request *per moved song*
+   * for the reorder endpoint. A big reshuffle is what trips Spotify's
+   * rolling-window limit, so past a threshold this is both faster and far
+   * cheaper.
+   *
+   * Only safe when the app knows the full intended contents — it removes
+   * anything not listed. The caller checks that Spotify holds no songs the
+   * plan does not know before using it.
+   */
+  async replaceItems(playlistId: string, uris: string[]): Promise<void> {
+    if (uris.length > REPLACE_LIMIT) {
+      throw new SpotifyError(
+        `Too many songs to replace in one call (${uris.length}).`,
+        400,
+        true,
+      )
+    }
+    await this.call(`/playlists/${playlistId}/tracks`, {
+      method: 'PUT',
+      body: JSON.stringify({ uris }),
     })
   }
 

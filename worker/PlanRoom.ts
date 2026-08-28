@@ -49,6 +49,14 @@ const MIN_POLL_GAP_MS = 30_000
  * limit; a short gap keeps a big change inside it.
  */
 const REORDER_GAP_MS = 250
+/**
+ * Past this many moves, replace the whole playlist in one request instead.
+ * Below it the per-song reorder is gentler: it preserves added-at dates and
+ * cannot remove anything.
+ */
+const REPLACE_THRESHOLD = 5
+/** Spotify's cap on a single replace call. */
+const REPLACE_MAX = 100
 
 type Session = {
   socket: WebSocket
@@ -92,6 +100,8 @@ export class PlanRoom implements DurableObject {
    * silently never fire.
    */
   private rateLimitedUntilMs = 0
+  /** Held so its cached access token survives between operations. */
+  private spotifyClient: OwnerSpotify | null = null
 
   // `state` is required by the runtime's constructor signature. This room
   // keeps its authoritative copy in D1 rather than DO storage, so the handle
@@ -562,13 +572,33 @@ export class PlanRoom implements DurableObject {
           `moves=${moves.length} missing=${absent.length}`,
       )
 
-      let snapshot = meta.snapshot_id
-      for (const [i, move] of moves.entries()) {
-        if (i > 0) await new Promise((r) => setTimeout(r, REORDER_GAP_MS))
-        const result = await spotify.reorder(playlistId, move, snapshot)
-        // Chain snapshots so a concurrent edit in the Spotify app is caught
-        // rather than silently overwritten.
-        snapshot = result.snapshot_id
+      // One request instead of one per moved song. A big reshuffle fired as
+      // dozens of back-to-back writes is what trips Spotify's rolling-window
+      // limit — the first sync after arming a playlist can move most of it.
+      //
+      // Replace removes anything not listed, so it is only safe when the
+      // plan accounts for every song on Spotify. `absent` being empty means
+      // the app knows the full contents.
+      const canReplace =
+        moves.length > REPLACE_THRESHOLD &&
+        absent.length === 0 &&
+        current.length === target.length &&
+        target.length <= REPLACE_MAX
+
+      if (canReplace) {
+        await spotify.replaceItems(playlistId, target)
+        console.log(
+          `sync replaced: plan=${this.planId} songs=${target.length} (instead of ${moves.length} moves)`,
+        )
+      } else {
+        let snapshot = meta.snapshot_id
+        for (const [i, move] of moves.entries()) {
+          if (i > 0) await new Promise((r) => setTimeout(r, REORDER_GAP_MS))
+          const result = await spotify.reorder(playlistId, move, snapshot)
+          // Chain snapshots so a concurrent edit in the Spotify app is caught
+          // rather than silently overwritten.
+          snapshot = result.snapshot_id
+        }
       }
 
       this.syncFailures = 0
@@ -640,7 +670,17 @@ export class PlanRoom implements DurableObject {
     }
   }
 
+  /**
+   * The Spotify client for this plan's owner, reused across operations.
+   *
+   * OwnerSpotify caches its access token in instance fields, so building a
+   * fresh one per poll and per sync threw that cache away and forced a token
+   * refresh every time — a hidden extra request on every operation, doing
+   * nothing but burning rate-limit budget.
+   */
   private async ownerClient(): Promise<OwnerSpotify> {
+    if (this.spotifyClient) return this.spotifyClient
+
     const row = await this.env.DB.prepare(
       'SELECT refresh_token_enc FROM owners WHERE spotify_user_id = ?',
     )
@@ -649,7 +689,7 @@ export class PlanRoom implements DurableObject {
 
     if (!row) throw new SpotifyError('The owner has not connected Spotify.', 401, true)
 
-    return OwnerSpotify.fromEncrypted(
+    this.spotifyClient = await OwnerSpotify.fromEncrypted(
       row.refresh_token_enc,
       this.env.ENCRYPTION_KEY,
       this.env.SPOTIFY_CLIENT_ID,
@@ -663,5 +703,6 @@ export class PlanRoom implements DurableObject {
           .run()
       },
     )
+    return this.spotifyClient
   }
 }
