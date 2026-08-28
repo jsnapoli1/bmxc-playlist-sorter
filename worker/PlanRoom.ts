@@ -15,9 +15,10 @@ import type { Plan } from '../src/lib/types.ts'
 import type { ClientMessage, Op, Presence, Role, ServerMessage, SyncState } from '../src/lib/protocol.ts'
 import { canEdit, MAX_OPS_PER_MESSAGE } from '../src/lib/protocol.ts'
 import { applyOps } from '../src/lib/applyOp.ts'
-import { displayOrderedTracks } from '../src/lib/playlistOrder.ts'
+import { displayOrderedTracks, orderedTrackIds } from '../src/lib/playlistOrder.ts'
 import { missingFromSpotify, reorderMoves } from '../src/lib/spotifyDiff.ts'
 import { inferSections } from '../src/lib/inheritSection.ts'
+import { adoptOrder } from '../src/lib/adoptSpotifyOrder.ts'
 import { describeRateLimit, OwnerSpotify, RateLimited, SpotifyError, sealRefreshToken } from './spotify.ts'
 import type { Env } from './env.ts'
 
@@ -399,7 +400,18 @@ export class PlanRoom implements DurableObject {
           this.plan?.tracks[id]?.sourceId === this.spotifyPlaylistId &&
           !tracks.some((t) => t.id === id),
       ).length
-      if (added === 0 && removed === 0) return
+
+      // Someone reordering in the Spotify app changes neither count. That
+      // used to end the poll here, so their edit survived only until the
+      // next push overwrote it.
+      const target = displayOrderedTracks(this.plan)
+        .map((t) => t.id)
+        .filter((id) => tracks.some((t) => t.id === id))
+      const onSpotify = tracks.map((t) => t.id).filter((id) => known.has(id))
+      const reordered =
+        target.length === onSpotify.length && target.some((id, i) => id !== onSpotify[i])
+
+      if (added === 0 && removed === 0 && !reordered) return
 
       // A song added inside one of the section runs the app pushed to
       // Spotify carries its intent in its position. Resolve that before
@@ -421,11 +433,33 @@ export class PlanRoom implements DurableObject {
         ),
         sourceId: this.spotifyPlaylistId,
       }
-      this.plan = applyOps(this.plan, [op])
+      const ops: Op[] = [op]
+
+      if (reordered) {
+        // Spotify wins: adopt its order and, critically, do not schedule a
+        // push. Pushing would immediately rewrite the playlist back into the
+        // app's order, which is the behaviour being fixed.
+        const applied = applyOps(this.plan, [op])
+        const sectionIds = (applied.sections ?? []).map((sc) => sc.id)
+        const { order, moved } = adoptOrder({
+          spotifyOrder: tracks.map((t) => t.id).filter((id) => applied.tracks[id]),
+          currentOrder: orderedTrackIds(applied),
+          sectionOf: (id) => applied.tracks[id]?.sectionId,
+          sectionIds,
+        })
+        const sections: Record<string, string | null> = {}
+        for (const [id, section] of moved) sections[id] = section ?? null
+        ops.push({ type: 'adoptOrder', order, sections })
+        console.log(
+          `poll adopted order: plan=${this.planId} moved=${moved.size} songs=${order.length}`,
+        )
+      }
+
+      this.plan = applyOps(this.plan, ops)
       this.rev += 1
       // Everyone applies the same op, so the change lands identically in
       // every open browser.
-      this.broadcast({ t: 'ops', rev: this.rev, ops: [op], from: 'spotify' })
+      this.broadcast({ t: 'ops', rev: this.rev, ops, from: 'spotify' })
       this.schedulePersist()
       console.log(
         `poll: plan=${this.planId} added=${added} removed=${removed} total=${tracks.length}`,

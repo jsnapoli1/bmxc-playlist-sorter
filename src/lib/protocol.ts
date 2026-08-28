@@ -53,6 +53,11 @@ export type Op =
   | { type: 'setEntryNote'; blockId: string; entryId: string; note: string }
   /** A note on the song itself, seen everywhere it appears. */
   | { type: 'setTrackNotes'; trackId: string; notes: string }
+  /**
+   * Adopt an order edited in the Spotify app. Carries any section changes
+   * the move implies, so the next push does not undo it.
+   */
+  | { type: 'adoptOrder'; order: string[]; sections: Record<string, string | null> }
   | { type: 'clearBlockEntries'; blockId: string }
   | { type: 'renamePlan'; name: string }
 

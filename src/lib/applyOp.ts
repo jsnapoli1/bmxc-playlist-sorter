@@ -289,6 +289,24 @@ export function applyOp(plan: Plan, op: Op): Plan {
         tracks: { ...plan.tracks, [op.trackId]: { ...track, notes: op.notes } },
       }
     }
+    case 'adoptOrder': {
+      // The order Spotify now has, plus any section moves that order
+      // implies. Applied together: adopting one without the other would let
+      // the next push undo the move.
+      const tracks: Record<string, Track> = { ...plan.tracks }
+      for (const [id, sectionId] of Object.entries(op.sections)) {
+        const track = tracks[id]
+        if (!track) continue
+        tracks[id] = { ...track, sectionId: sectionId ?? undefined }
+      }
+      // Ignore ids the plan does not know; a song can leave between the read
+      // and the apply.
+      const order = op.order.filter((id) => tracks[id])
+      // Anything the op did not mention keeps its place at the end rather
+      // than being dropped.
+      const missing = orderedTrackIds(plan).filter((id) => tracks[id] && !order.includes(id))
+      return { ...plan, tracks, trackOrder: [...order, ...missing] }
+    }
     case 'clearBlockEntries':
       return mapBlock(plan, op.blockId, (b) => ({ ...b, entries: [] }))
 
