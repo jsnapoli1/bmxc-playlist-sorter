@@ -1047,6 +1047,16 @@ code.inline {
   /* The wordmark costs a whole row's worth of width; the mark is enough. */
   .brand-text { display: none; }
 
+  /* `nowrap` above means something has to give when the row is wider than
+     the phone: at 375px the picker's intrinsic width plus the two buttons
+     came to 425 and the last button hung off the screen. A select defaults
+     to min-width:auto and so refuses to shrink — the playlist name is the
+     one label here that can be truncated, so it absorbs the squeeze. */
+  .topbar select {
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+
   /* Tabs live in the bottom bar instead. */
   .app { padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
 

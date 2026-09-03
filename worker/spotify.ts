@@ -412,7 +412,12 @@ export class OwnerSpotify {
         true,
       )
     }
-    await this.call(`/playlists/${playlistId}/tracks`, {
+    // `/items`, not `/tracks`: the February 2026 API renamed this path, and
+    // the old one answers 403 rather than 404 — which reads as a permissions
+    // problem and sent the first diagnosis chasing playlist ownership. Every
+    // other call in this file uses /items; this one was written from the old
+    // docs and was the only exception.
+    await this.call(`/playlists/${playlistId}/items`, {
       method: 'PUT',
       body: JSON.stringify({ uris }),
     })
